@@ -1,0 +1,101 @@
+{
+  "entities": {
+    "transactions": {
+      "title": "Transaction",
+      "description": "Financial income and expense transactions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "amount": { "type": "number" },
+        "category": { "type": "string" },
+        "date": { "type": "string" },
+        "paymentMethod": { "type": "string" },
+        "note": { "type": "string" },
+        "receiptImage": { "type": "string" },
+        "createdAt": { "type": "number" }
+      },
+      "required": ["id", "type", "amount", "category", "date"]
+    },
+    "categories": {
+      "title": "Category",
+      "description": "Categories for income and expenses",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "name": { "type": "string" },
+        "nameBn": { "type": "string" },
+        "type": { "type": "string" },
+        "icon": { "type": "string" },
+        "color": { "type": "string" },
+        "isHidden": { "type": "boolean" }
+      },
+      "required": ["id", "name", "nameBn", "type"]
+    },
+    "debts": {
+      "title": "Debt",
+      "description": "Debt and loan records (Pawna / Dena)",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "type": { "type": "string" },
+        "personName": { "type": "string" },
+        "amount": { "type": "number" },
+        "paidAmount": { "type": "number" },
+        "dueDate": { "type": "string" },
+        "date": { "type": "string" },
+        "notes": { "type": "string" },
+        "status": { "type": "string" }
+      },
+      "required": ["id", "type", "personName", "amount"]
+    },
+    "savingsGoals": {
+      "title": "Savings Goal",
+      "description": "Savings goals and progress",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "targetAmount": { "type": "number" },
+        "currentAmount": { "type": "number" },
+        "targetDate": { "type": "string" },
+        "color": { "type": "string" },
+        "icon": { "type": "string" }
+      },
+      "required": ["id", "title", "targetAmount"]
+    },
+    "budgets": {
+      "title": "Budget",
+      "description": "Monthly budgets by category",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "categoryId": { "type": "string" },
+        "monthlyTarget": { "type": "number" },
+        "alertThresholdPercent": { "type": "number" }
+      },
+      "required": ["id", "categoryId", "monthlyTarget"]
+    },
+    "userProfile": {
+      "title": "User Profile",
+      "description": "User profile settings",
+      "type": "object",
+      "properties": {
+        "name": { "type": "string" },
+        "email": { "type": "string" },
+        "pinCode": { "type": "string" },
+        "pinLockEnabled": { "type": "boolean" },
+        "familyOrBusinessMode": { "type": "string" }
+      }
+    },
+    "adminSettings": {
+      "title": "Admin Settings",
+      "description": "System admin configuration and prompt",
+      "type": "object",
+      "properties": {
+        "systemPrompt": { "type": "string" },
+        "adminPasscode": { "type": "string" }
+      }
+    }
+  }
+}

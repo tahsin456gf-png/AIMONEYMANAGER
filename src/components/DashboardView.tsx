@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useMoney } from '../context/MoneyContext';
+import { useMoney, isIncomeType, isExpenseType } from '../context/MoneyContext';
 import {
   Wallet,
   TrendingUp,
@@ -56,29 +56,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenAddModal, on
 
   // Calculations
   const totalIncome = transactions
-    .filter((t) => t.type === 'income')
+    .filter((t) => isIncomeType(t.type))
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const totalExpense = transactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => isExpenseType(t.type))
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const totalBalance = initialTotal + mainOffset + totalIncome - totalExpense;
 
   const todayIncome = transactions
-    .filter((t) => t.type === 'income' && t.date === todayStr)
+    .filter((t) => isIncomeType(t.type) && t.date === todayStr)
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const todayExpense = transactions
-    .filter((t) => t.type === 'expense' && t.date === todayStr)
+    .filter((t) => isExpenseType(t.type) && t.date === todayStr)
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const monthExpense = transactions
-    .filter((t) => t.type === 'expense' && t.date.startsWith(currentMonthStr))
+    .filter((t) => isExpenseType(t.type) && t.date.startsWith(currentMonthStr))
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const monthIncome = transactions
-    .filter((t) => t.type === 'income' && t.date.startsWith(currentMonthStr))
+    .filter((t) => isIncomeType(t.type) && t.date.startsWith(currentMonthStr))
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const monthSavings = Math.max(0, monthIncome - monthExpense);

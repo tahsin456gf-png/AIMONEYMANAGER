@@ -27,6 +27,19 @@ import {
   AccountMethod,
 } from '../types';
 import { ThemePreset, getTheme } from '../theme';
+import { TransactionType } from '../types';
+
+export const isIncomeType = (t: string | undefined): boolean => {
+  if (!t) return false;
+  const l = t.toString().toLowerCase().trim();
+  return l === 'income' || l === 'inc' || l.includes('আয়') || l.includes('আয়') || l.includes('জমা');
+};
+
+export const isExpenseType = (t: string | undefined): boolean => {
+  if (!t) return false;
+  const l = t.toString().toLowerCase().trim();
+  return l === 'expense' || l === 'exp' || l.includes('ব্যয়') || l.includes('ব্যায়') || l.includes('খরচ');
+};
 import {
   DEFAULT_INCOME_CATEGORIES,
   DEFAULT_EXPENSE_CATEGORIES,
@@ -215,7 +228,16 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           await setDoc(doc(db, 'transactions', item.id), item);
         }
       } else {
-        const list: Transaction[] = snapshot.docs.map((d) => d.data() as Transaction);
+        const list: Transaction[] = snapshot.docs.map((d) => {
+          const data = d.data() as Transaction;
+          const rawType = (data.type || '').toString();
+          const normalizedType: TransactionType = isIncomeType(rawType) ? 'income' : 'expense';
+          return {
+            ...data,
+            type: normalizedType,
+            amount: Math.abs(Number(data.amount) || 0),
+          };
+        });
         list.sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         setTransactions(list);
       }
@@ -353,16 +375,22 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const addTransaction = async (tx: Omit<Transaction, 'id' | 'createdAt'>) => {
     const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
     const positiveAmount = Math.abs(Number(tx.amount) || 0);
+    const normalizedType: 'income' | 'expense' = isIncomeType(tx.type) ? 'income' : 'expense';
 
-    // 1. Check if Category exists; match existing category or create a new one
-    const catList = tx.type === 'income' ? incomeCategories : expenseCategories;
-    const cleanCatTarget = tx.category
-      ? tx.category
-          .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
-          .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
-          .trim()
-          .toLowerCase()
-      : '';
+    // 1. Check if Category exists; match existing category or default categories first
+    const stateCats = normalizedType === 'income' ? incomeCategories : expenseCategories;
+    const defaultCats = normalizedType === 'income' ? DEFAULT_INCOME_CATEGORIES : DEFAULT_EXPENSE_CATEGORIES;
+    
+    // Combine state and defaults so we NEVER duplicate default or existing categories!
+    const catList = [...stateCats, ...defaultCats];
+
+    const rawCatStr = tx.category || '';
+    const cleanCatTarget = rawCatStr
+      .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
+      .replace(/(ে|িতে|\s+এ|\s+খরচ|\s+করলাম|\s+দিলাম|\s+ব্যয়|\s+ব্যায়|\s+বাবদ)/gi, '')
+      .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
+      .trim()
+      .toLowerCase();
 
     const matchedCat = catList.find((c) => {
       const nameBnClean = c.nameBn
@@ -380,41 +408,48 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
             .toLowerCase()
         : '';
 
-      if (c.nameBn === tx.category || c.name === tx.category || c.id === tx.category) return true;
+      if (c.nameBn === rawCatStr || c.name === rawCatStr || c.id === rawCatStr) return true;
       if (cleanCatTarget.length >= 2) {
         if (nameBnClean === cleanCatTarget || nameClean === cleanCatTarget) return true;
         if (nameBnClean.includes(cleanCatTarget) || cleanCatTarget.includes(nameBnClean)) return true;
+        if (nameClean.includes(cleanCatTarget) || cleanCatTarget.includes(nameClean)) return true;
       }
       return false;
     });
 
-    let resolvedCategoryName = tx.category;
+    let resolvedCategoryName = rawCatStr;
 
     if (matchedCat) {
       // Use exact category name from existing category to prevent creating duplicate category buttons!
       resolvedCategoryName = matchedCat.nameBn || matchedCat.name;
-    } else if (tx.category) {
+    } else if (rawCatStr) {
       // Create new category ONLY when no matching category exists anywhere
-      const iconMatch = tx.category.match(/^(\p{Extended_Pictographic}|\p{Emoji})/u);
-      const icon = iconMatch ? iconMatch[0] : tx.type === 'income' ? '💰' : '🏷️';
-      const cleanName = tx.category.replace(/^(\p{Extended_Pictographic}|\p{Emoji})\s*/u, '').trim() || tx.category;
-      resolvedCategoryName = iconMatch ? tx.category : `${icon} ${cleanName}`;
+      const iconMatch = rawCatStr.match(/^(\p{Extended_Pictographic}|\p{Emoji})/u);
+      const icon = iconMatch ? iconMatch[0] : normalizedType === 'income' ? '💰' : '🏷️';
+      const cleanName = rawCatStr.replace(/^(\p{Extended_Pictographic}|\p{Emoji})\s*/u, '').trim() || rawCatStr;
+      resolvedCategoryName = iconMatch ? rawCatStr : `${icon} ${cleanName}`;
 
       const newCat: Category = {
         id: 'cat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
         name: cleanName,
         nameBn: resolvedCategoryName,
-        type: tx.type,
+        type: normalizedType,
         icon,
-        color: tx.type === 'income' ? '#10B981' : '#EF4444',
+        color: normalizedType === 'income' ? '#10B981' : '#EF4444',
         isCustom: true,
         isHidden: false,
       };
 
-      if (tx.type === 'income') {
-        setIncomeCategories((prev) => [...prev, newCat]);
+      if (normalizedType === 'income') {
+        setIncomeCategories((prev) => {
+          if (prev.some((c) => (c.nameBn || c.name) === resolvedCategoryName)) return prev;
+          return [...prev, newCat];
+        });
       } else {
-        setExpenseCategories((prev) => [...prev, newCat]);
+        setExpenseCategories((prev) => {
+          if (prev.some((c) => (c.nameBn || c.name) === resolvedCategoryName)) return prev;
+          return [...prev, newCat];
+        });
       }
 
       setDoc(doc(db, 'categories', newCat.id), newCat).catch((err) => console.error('Category save error:', err));
@@ -422,6 +457,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
     const newTx: Transaction = {
       ...tx,
+      type: normalizedType,
       category: resolvedCategoryName,
       amount: positiveAmount,
       id,

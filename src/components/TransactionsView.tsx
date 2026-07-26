@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { useMoney } from '../context/MoneyContext';
+import { useMoney, isIncomeType, isExpenseType } from '../context/MoneyContext';
 import {
   Wallet,
   PlusCircle,
@@ -42,7 +42,8 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   // Filter Logic
   const filteredTransactions = transactions.filter((tx) => {
-    if (filterType !== 'all' && tx.type !== filterType) return false;
+    if (filterType === 'income' && !isIncomeType(tx.type)) return false;
+    if (filterType === 'expense' && !isExpenseType(tx.type)) return false;
     if (selectedCategory !== 'all' && tx.category !== selectedCategory) return false;
     if (
       searchFilter &&
@@ -56,11 +57,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
   });
 
   const totalFilteredIncome = filteredTransactions
-    .filter((t) => t.type === 'income')
+    .filter((t) => isIncomeType(t.type))
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const totalFilteredExpense = filteredTransactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => isExpenseType(t.type))
     .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   // CSV Export

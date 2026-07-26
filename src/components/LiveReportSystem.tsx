@@ -1,5 +1,5 @@
 import React, { useState, useRef } from 'react';
-import { useMoney } from '../context/MoneyContext';
+import { useMoney, isIncomeType, isExpenseType } from '../context/MoneyContext';
 import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import {
@@ -134,11 +134,11 @@ export const LiveReportSystem: React.FC = () => {
 
   // Totals
   const totalIncome = monthFilteredTransactions
-    .filter((t) => t.type === 'income')
+    .filter((t) => isIncomeType(t.type))
     .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
   const totalExpense = monthFilteredTransactions
-    .filter((t) => t.type === 'expense')
+    .filter((t) => isExpenseType(t.type))
     .reduce((sum, t) => sum + Math.abs(t.amount || 0), 0);
 
   const balance = totalIncome - totalExpense;

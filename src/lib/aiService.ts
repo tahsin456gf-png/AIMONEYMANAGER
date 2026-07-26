@@ -103,15 +103,18 @@ function computeWalletBreakdown(
   (ctx.transactions || []).forEach((t: any) => {
     const amt = Math.abs(Number(t.amount) || 0);
     const method = (t.paymentMethod || 'Cash').toLowerCase();
+    const txType = (t.type || '').toString().toLowerCase().trim();
+    const isInc = txType === 'income' || txType === 'inc' || txType.includes('আয়') || txType.includes('আয়') || txType.includes('জমা');
+    const isExp = txType === 'expense' || txType === 'exp' || txType.includes('ব্যয়') || txType.includes('ব্যায়') || txType.includes('খরচ');
 
-    if (t.type === 'income') {
+    if (isInc) {
       totalIncome += amt;
       if (method.includes('bkash') || method.includes('বিকাশ')) bkashBal += amt;
       else if (method.includes('nagad') || method.includes('নগদ')) nagadBal += amt;
       else if (method.includes('rocket') || method.includes('রকেট')) rocketBal += amt;
       else if (method.includes('bank') || method.includes('ব্যাংক') || method.includes('ibbplc')) bankBal += amt;
       else cashBal += amt;
-    } else if (t.type === 'expense') {
+    } else if (isExp) {
       totalExpense += amt;
       if (method.includes('bkash') || method.includes('বিকাশ')) bkashBal -= amt;
       else if (method.includes('nagad') || method.includes('নগদ')) nagadBal -= amt;
@@ -611,8 +614,12 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
+  // F. Explicit intent classification
+  const isExplicitExpense = /ব্যয়|ব্যায়|খরচ|কিনলাম|কিনছি|দিলাম|দিছি|খেলাম|ভাড়া|বিল|বাজার|রিকশা|গাড়ি|দান|এমবি|নাস্তা|চা|যাতায়াত|পাঠালাম|গেছে|গেলো|কেনাকাটা|মেস|পার্লার|শপিং|ফি/i.test(rawPrompt);
+  const isExplicitIncome = (/বেতন|বোনাস|উপহার পেলাম|ইনকাম|আয় হয়েছে|লাভ|জমা হলো|স্যালারি/i.test(rawPrompt) || (/\bআয়\b|আয়/i.test(rawPrompt) && !isExplicitExpense)) && !/খরচ|দিলাম|দিছি|কিনলাম|ব্যয়|ব্যায়|বাজার|ভাড়া|বিল/i.test(rawPrompt);
+
   // F. Check for INCOME
-  if (/আয়|বেতন|বোনাস|উপহার পেলাম|জমা হলো|ইনকাম|আয় হয়েছে|পেলাম/i.test(rawPrompt) && extractedAmount) {
+  if (isExplicitIncome && extractedAmount) {
     const category = matchCategoryFromList(rawPrompt, ctx.categories?.income, 'income');
 
     const aiReplyMessage = computeWalletBreakdown(ctx, {
@@ -649,7 +656,7 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
   }
 
   // G. Check for EXPENSE
-  if (extractedAmount || /খরচ|কিনলাম|কিনছি|দিলাম|খেলাম|ভাড়া|বিল|বাজার|রিকশা|গাড়ি|দান|এমবি|নাস্তা|চা/i.test(rawPrompt)) {
+  if (extractedAmount || isExplicitExpense) {
     const amt = extractedAmount || 100;
     const category = matchCategoryFromList(rawPrompt, ctx.categories?.expense, 'expense');
 

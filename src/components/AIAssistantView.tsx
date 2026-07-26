@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { useMoney } from '../context/MoneyContext';
+import { parseTransactionWithAI, toBnDateStr, toBnDigits } from '../lib/aiService';
 import {
   Bot,
   Send,
@@ -10,15 +11,12 @@ import {
   VolumeX,
   Camera,
   Trash2,
-  PlusCircle,
   CheckCircle2,
-  TrendingDown,
-  TrendingUp,
-  ArrowLeftRight,
-  RefreshCw,
-  Image,
+  Calendar,
+  X,
+  Filter,
 } from 'lucide-react';
-import { motion } from 'motion/react';
+import { motion, AnimatePresence } from 'motion/react';
 
 export const AIAssistantView: React.FC = () => {
   const {
@@ -34,7 +32,6 @@ export const AIAssistantView: React.FC = () => {
     budgets,
     savingsGoals,
     adminSettings,
-    currentTheme,
   } = useMoney();
 
   const [inputPrompt, setInputPrompt] = useState('');
@@ -42,6 +39,12 @@ export const AIAssistantView: React.FC = () => {
   const [isListening, setIsListening] = useState(false);
   const [isTtsEnabled, setIsTtsEnabled] = useState(true);
   const [receiptImage, setReceiptImage] = useState<string | null>(null);
+
+  // Calendar Modal State
+  const [isCalendarOpen, setIsCalendarOpen] = useState(false);
+  const [selectedFilterDate, setSelectedFilterDate] = useState<string>(
+    new Date().toISOString().split('T')[0]
+  );
 
   const chatEndRef = useRef<HTMLDivElement>(null);
 
@@ -99,7 +102,7 @@ export const AIAssistantView: React.FC = () => {
 
     setInputPrompt('');
     const userText = receiptImage ? `[মেমো ছবিসহ] ${text || 'রসিদ স্ক্যান করো'}` : text;
-    
+
     // Add User Message
     addChatMessage({
       sender: 'user',
@@ -123,7 +126,7 @@ export const AIAssistantView: React.FC = () => {
 
         if (ocrResult.totalAmount) {
           const aiText = `রসিদ স্ক্যান করা হয়েছে! দোকান: ${ocrResult.storeName || 'অজ্ঞাত'}, মোট পরিমাণ: ৳${ocrResult.totalAmount}, ক্যাটাগরি: ${ocrResult.suggestedCategory || '🛒 বাজার'}`;
-          
+
           addChatMessage({
             sender: 'ai',
             text: aiText,
@@ -147,25 +150,19 @@ export const AIAssistantView: React.FC = () => {
           });
         }
       } else {
-        // Send to AI Parse & Action API with full context
-        const response = await fetch('/api/ai/parse-transaction', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            prompt: text,
-            categories: {
-              income: incomeCategories.map((c) => c.nameBn),
-              expense: expenseCategories.map((c) => c.nameBn),
-            },
-            transactions,
-            debts,
-            budgets,
-            savingsGoals,
-            adminSettings,
-          }),
+        // Send to AI Parse & Action API with full multi-tier fallback
+        const parseResult = await parseTransactionWithAI({
+          prompt: text,
+          categories: {
+            income: incomeCategories.map((c) => c.nameBn),
+            expense: expenseCategories.map((c) => c.nameBn),
+          },
+          transactions,
+          debts,
+          budgets,
+          savingsGoals,
+          adminSettings,
         });
-
-        const parseResult = await response.json();
 
         // If AI suggested an action, automatically execute it live to update database & state!
         if (parseResult.structuredAction) {
@@ -196,15 +193,14 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
-  // Preset Bangladeshi prompts requested in Blueprint
+  // Preset Bangladeshi prompts matching prompt & screenshot
   const presetPrompts = [
-    'আজকে বাজারে ৪৮০ টাকা খরচ করেছি।',
-    'রিকশায় ৭০ টাকা।',
-    'সোহেলকে ২০০০ টাকা ধার দিলাম।',
-    'বাবার কাছ থেকে ৫০০০ টাকা ধার নিলাম।',
-    'গত মাসে কত খরচ করেছি?',
-    'সবচেয়ে বেশি টাকা কোথায় খরচ হয়?',
-    'গত ৬ মাসে খাদ্যে কত খরচ?',
+    'আজকে (24) বিকাশ থেকে আমার মোবাইল এর জন্য এমবি কিনছে 272 টাকা',
+    'আজকে ৫০০০ টাকা আয় হয়েছে',
+    'সামারি দাও',
+    'আজকে বাজারে ৪৮০ টাকা খরচ করেছি',
+    'সোহেলকে ২০০০ টাকা ধার দিলাম',
+    'আমার আর্থিক অবস্থা কেমন?',
   ];
 
   // Image Upload Handler
@@ -218,10 +214,19 @@ export const AIAssistantView: React.FC = () => {
     reader.readAsDataURL(file);
   };
 
+  // Filter transactions for calendar date
+  const filteredDateTransactions = transactions.filter((t) => t.date === selectedFilterDate);
+  const filterDateIncome = filteredDateTransactions
+    .filter((t) => t.type === 'income')
+    .reduce((sum, t) => sum + t.amount, 0);
+  const filterDateExpense = filteredDateTransactions
+    .filter((t) => t.type === 'expense')
+    .reduce((sum, t) => sum + t.amount, 0);
+
   return (
-    <div className="flex flex-col h-[calc(100vh-140px)] space-y-3 pb-20">
+    <div className="flex flex-col h-[calc(100vh-140px)] space-y-3 pb-20 relative">
       {/* AI Assistant Header Bar */}
-      <div className="flex items-center justify-between bg-slate-900/80 border border-slate-800 p-3 rounded-2xl backdrop-blur-xl shrink-0">
+      <div className="flex items-center justify-between bg-slate-900/90 border border-slate-800 p-3 rounded-2xl backdrop-blur-xl shrink-0 shadow-lg">
         <div className="flex items-center gap-2.5">
           <div className="w-9 h-9 rounded-xl bg-gradient-to-tr from-indigo-600 via-blue-600 to-emerald-500 p-[1.5px] shadow-md shadow-indigo-500/20">
             <div className="w-full h-full bg-slate-950 rounded-[10px] flex items-center justify-center">
@@ -233,11 +238,21 @@ export const AIAssistantView: React.FC = () => {
               <span>ChatGPT / Gemini AI Assistant</span>
               <Sparkles className="w-3.5 h-3.5 text-emerald-400" />
             </h2>
-            <p className="text-[10px] text-slate-400">Natural Language & Voice Expense Tracker</p>
+            <p className="text-[10px] text-slate-400">অটোমেটিক সেভিং ও লাইভ সামারি রিপোর্ট</p>
           </div>
         </div>
 
         <div className="flex items-center gap-1.5">
+          {/* Calendar Date Picker Modal Trigger */}
+          <button
+            onClick={() => setIsCalendarOpen(true)}
+            className="p-2 rounded-xl bg-indigo-500/10 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/20 transition-all text-xs flex items-center gap-1 font-semibold"
+            title="ক্যালেন্ডার ও লাইভ তারিখ ফিল্টার"
+          >
+            <Calendar className="w-4 h-4 text-indigo-400" />
+            <span className="hidden sm:inline text-[11px]">{toBnDateStr(selectedFilterDate)}</span>
+          </button>
+
           <button
             onClick={() => setIsTtsEnabled(!isTtsEnabled)}
             className={`p-2 rounded-xl border text-xs font-semibold transition-all ${
@@ -269,7 +284,7 @@ export const AIAssistantView: React.FC = () => {
             className={`flex ${msg.sender === 'user' ? 'justify-end' : 'justify-start'}`}
           >
             <div
-              className={`max-w-[88%] sm:max-w-[75%] p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed ${
+              className={`max-w-[92%] sm:max-w-[78%] p-3.5 rounded-2xl text-xs sm:text-sm leading-relaxed ${
                 msg.sender === 'user'
                   ? 'bg-emerald-600 text-white rounded-br-none shadow-lg shadow-emerald-900/20'
                   : 'bg-slate-900 border border-slate-800 text-slate-200 rounded-bl-none shadow-xl'
@@ -278,11 +293,13 @@ export const AIAssistantView: React.FC = () => {
               {msg.sender === 'ai' && (
                 <div className="flex items-center gap-1.5 text-[11px] font-bold text-emerald-400 mb-1">
                   <Bot className="w-3.5 h-3.5" />
-                  <span>AI Manager</span>
+                  <span>AI Money Assistant</span>
                 </div>
               )}
 
-              <div className="whitespace-pre-line">{msg.text}</div>
+              <div className="whitespace-pre-line font-mono text-[12px] sm:text-[13px] leading-relaxed">
+                {msg.text}
+              </div>
 
               {/* Action Confirmation Card */}
               {msg.structuredAction && (
@@ -290,11 +307,11 @@ export const AIAssistantView: React.FC = () => {
                   <div className="flex items-center gap-2">
                     <CheckCircle2 className="w-4 h-4 text-emerald-400 shrink-0" />
                     <div>
-                      <span className="font-bold text-white block">স্বয়ংক্রিয়ভাবে সংরক্ষিত!</span>
+                      <span className="font-bold text-white block">স্বয়ংক্রিয়ভাবে ডাটাবেজে সেভ হয়েছে!</span>
                       <span className="text-[11px] text-slate-400">
                         {msg.structuredAction.type === 'ADD_TRANSACTION'
-                          ? `${msg.structuredAction.payload.category}: ৳${msg.structuredAction.payload.amount}`
-                          : `${msg.structuredAction.payload.personName}: ৳${msg.structuredAction.payload.amount}`}
+                          ? `${msg.structuredAction.payload.category}: ৳${toBnDigits(msg.structuredAction.payload.amount)}`
+                          : `${msg.structuredAction.payload.personName}: ৳${toBnDigits(msg.structuredAction.payload.amount)}`}
                       </span>
                     </div>
                   </div>
@@ -312,7 +329,7 @@ export const AIAssistantView: React.FC = () => {
           <div className="flex justify-start">
             <div className="bg-slate-900 border border-slate-800 p-3 rounded-2xl rounded-bl-none flex items-center gap-2 text-xs text-slate-400">
               <Bot className="w-4 h-4 text-emerald-400 animate-spin" />
-              <span>এআই এন্ট্রি চিন্তা করছে...</span>
+              <span>এআই আপনার ইনপুট এনালাইসিস ও সামারি তৈরি করছে...</span>
             </div>
           </div>
         )}
@@ -325,7 +342,7 @@ export const AIAssistantView: React.FC = () => {
           <button
             key={i}
             onClick={() => handleSendMessage(prompt)}
-            className="whitespace-nowrap px-3 py-1.5 bg-slate-900/80 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/40 rounded-full text-xs text-slate-300 hover:text-emerald-400 transition-all shrink-0"
+            className="whitespace-nowrap px-3 py-1.5 bg-slate-900/90 hover:bg-slate-800 border border-slate-800 hover:border-emerald-500/40 rounded-full text-xs text-slate-300 hover:text-emerald-400 transition-all shrink-0"
           >
             💬 {prompt}
           </button>
@@ -364,7 +381,7 @@ export const AIAssistantView: React.FC = () => {
           value={inputPrompt}
           onChange={(e) => setInputPrompt(e.target.value)}
           onKeyDown={(e) => e.key === 'Enter' && handleSendMessage()}
-          placeholder="যেমন: বাজারে ৪৮০ টাকা খরচ অথবা সোহেলকে ২০০০ দিলাম..."
+          placeholder="যেমন: আজকে বিকাশ থেকে মোবাইল এমবি ২৫০ টাকা..."
           className="flex-1 bg-transparent text-xs sm:text-sm text-slate-100 placeholder-slate-500 focus:outline-none px-2"
         />
 
@@ -392,6 +409,79 @@ export const AIAssistantView: React.FC = () => {
           <Send className="w-5 h-5" />
         </button>
       </div>
+
+      {/* Calendar Date Picker Modal Popup */}
+      <AnimatePresence>
+        {isCalendarOpen && (
+          <div className="fixed inset-0 bg-slate-950/80 backdrop-blur-md z-50 flex items-center justify-center p-4">
+            <motion.div
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="bg-slate-900 border border-slate-800 rounded-3xl p-5 max-w-sm w-full space-y-4 shadow-2xl relative"
+            >
+              <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+                <div className="flex items-center gap-2 text-indigo-400 font-bold text-sm">
+                  <Calendar className="w-4 h-4" />
+                  <span>লাইভ তারিখ ফিল্টার ও সামারি</span>
+                </div>
+                <button
+                  onClick={() => setIsCalendarOpen(false)}
+                  className="p-1 rounded-full hover:bg-slate-800 text-slate-400 hover:text-white"
+                >
+                  <X className="w-5 h-5" />
+                </button>
+              </div>
+
+              <div className="space-y-2">
+                <label className="text-xs text-slate-400 font-medium block">
+                  তারিখ নির্বাচন করুন:
+                </label>
+                <input
+                  type="date"
+                  value={selectedFilterDate}
+                  onChange={(e) => setSelectedFilterDate(e.target.value)}
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-3 text-sm text-white focus:outline-none focus:border-indigo-500"
+                />
+              </div>
+
+              <div className="bg-slate-950 border border-slate-800 rounded-2xl p-3 space-y-2">
+                <div className="flex items-center justify-between text-xs font-semibold text-slate-300">
+                  <span>📅 নির্বাচিত তারিখ:</span>
+                  <span className="text-emerald-400">{toBnDateStr(selectedFilterDate)}</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2 text-xs pt-1 border-t border-slate-900">
+                  <div className="bg-slate-900 p-2 rounded-xl text-emerald-400 border border-emerald-500/20">
+                    <span className="block text-[10px] text-slate-400">দিনটি আয়</span>
+                    <span className="font-bold text-sm">৳{toBnDigits(filterDateIncome)}</span>
+                  </div>
+                  <div className="bg-slate-900 p-2 rounded-xl text-rose-400 border border-rose-500/20">
+                    <span className="block text-[10px] text-slate-400">দিনটি খরচ</span>
+                    <span className="font-bold text-sm">৳{toBnDigits(filterDateExpense)}</span>
+                  </div>
+                </div>
+
+                <div className="text-[11px] text-slate-400 pt-1">
+                  মোট লেনদেন সংখ্যা: <strong className="text-white">{toBnDigits(filteredDateTransactions.length)}টি</strong>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2 pt-2">
+                <button
+                  onClick={() => {
+                    setIsCalendarOpen(false);
+                    handleSendMessage(`${toBnDateStr(selectedFilterDate)} তারিখের হিসাব সামারি দাও`);
+                  }}
+                  className="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white font-bold text-xs py-2.5 px-4 rounded-xl transition-all flex items-center justify-center gap-1.5 shadow-lg shadow-indigo-900/30"
+                >
+                  <Filter className="w-3.5 h-3.5" />
+                  <span>এই তারিখের AI রিপোর্ট চাও</span>
+                </button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

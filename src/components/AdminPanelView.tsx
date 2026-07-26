@@ -26,6 +26,12 @@ import {
   Coins,
   ArrowLeftRight,
   Palette,
+  FileText,
+  CheckCircle2,
+  AlertTriangle,
+  Info,
+  Plus,
+  Edit3,
 } from 'lucide-react';
 import { THEMES } from '../theme';
 import { ThemeId } from '../types';
@@ -55,7 +61,40 @@ export const AdminPanelView: React.FC = () => {
 
   const [passcode, setPasscode] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
-  const [activeAdminTab, setActiveAdminTab] = useState<'reports' | 'balances' | 'themes' | 'categories' | 'ai' | 'backup'>('reports');
+  const [activeAdminTab, setActiveAdminTab] = useState<'reports' | 'research' | 'balances' | 'themes' | 'categories' | 'ai' | 'backup'>('reports');
+
+  // Research Report Settings state
+  const resSettings = adminSettings.researchReportSettings || {
+    reportDate: '২৫/৭/২০২৬',
+    refId: 'REF-RES2-2026',
+    statusText: 'অনুমোদিত (VERIFIED)',
+    showDefaultAutoObservations: true,
+    customObservations: [
+      {
+        id: 'obs_1',
+        title: 'গবেষণা পর্যবেক্ষণ ১: শীর্ষ ব্যয় খাত বিশ্লেষণ',
+        content: 'চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে বিল খাতে। এই খাতে আপনার মোট খরচের 68.6% ব্যয় হয়েছে।',
+        type: 'warning',
+        isHidden: false,
+      },
+      {
+        id: 'obs_2',
+        title: 'গবেষণা পর্যবেক্ষণ ২: বাজেট সাশ্রয় ও মূলধন সুরক্ষা',
+        content: 'আপনার মোট নির্ধারিত বাজেটের 93.0% অর্থ এখনও সাশ্রয় রয়েছে, যা ভবিষ্যতের যে কোনো জরুরি খরচে ব্যবহারের উপযোগী।',
+        type: 'success',
+        isHidden: false,
+      },
+    ],
+  };
+
+  const [resReportDate, setResReportDate] = useState(resSettings.reportDate || '২৫/৭/২০২৬');
+  const [resRefId, setResRefId] = useState(resSettings.refId || 'REF-RES2-2026');
+  const [resStatusText, setResStatusText] = useState(resSettings.statusText || 'অনুমোদিত (VERIFIED)');
+
+  const [newObsTitle, setNewObsTitle] = useState('');
+  const [newObsContent, setNewObsContent] = useState('');
+  const [newObsType, setNewObsType] = useState<'warning' | 'success' | 'info'>('warning');
+  const [editingObsId, setEditingObsId] = useState<string | null>(null);
 
   // Initial Balances state
   const initBal = adminSettings.initialBalances || {};
@@ -100,6 +139,84 @@ export const AdminPanelView: React.FC = () => {
     } else {
       alert('ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন (Default: admin123)');
     }
+  };
+
+  const handleSaveResearchHeader = async (e: React.FormEvent) => {
+    e.preventDefault();
+    const updatedSettings = {
+      ...(adminSettings.researchReportSettings || {}),
+      reportDate: resReportDate,
+      refId: resRefId,
+      statusText: resStatusText,
+    };
+    await updateAdminSettings({ researchReportSettings: updatedSettings });
+    alert('গবেষণা পার্ট ২ হেডার তথ্য সফলভাবে আপডেট হয়েছে!');
+  };
+
+  const handleAddOrUpdateObservation = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newObsTitle.trim() || !newObsContent.trim()) {
+      alert('পর্যবেক্ষণ শিরোনাম ও বিস্তারিত প্রদান করুন');
+      return;
+    }
+
+    const currentObs = resSettings.customObservations || [];
+    let updatedObs = [];
+
+    if (editingObsId) {
+      updatedObs = currentObs.map((obs) =>
+        obs.id === editingObsId
+          ? { ...obs, title: newObsTitle.trim(), content: newObsContent.trim(), type: newObsType }
+          : obs
+      );
+    } else {
+      const newObs = {
+        id: 'obs_' + Date.now(),
+        title: newObsTitle.trim(),
+        content: newObsContent.trim(),
+        type: newObsType,
+        isHidden: false,
+      };
+      updatedObs = [...currentObs, newObs];
+    }
+
+    const updatedSettings = {
+      ...resSettings,
+      reportDate: resReportDate,
+      refId: resRefId,
+      statusText: resStatusText,
+      customObservations: updatedObs,
+    };
+
+    await updateAdminSettings({ researchReportSettings: updatedSettings });
+    setNewObsTitle('');
+    setNewObsContent('');
+    setNewObsType('warning');
+    setEditingObsId(null);
+    alert(editingObsId ? 'গবেষণা পর্যবেক্ষণ আপডেট হয়েছে!' : 'নতুন গবেষণা পর্যবেক্ষণ যুক্ত হয়েছে!');
+  };
+
+  const handleToggleHideObs = async (id: string) => {
+    const currentObs = resSettings.customObservations || [];
+    const updatedObs = currentObs.map((obs) =>
+      obs.id === id ? { ...obs, isHidden: !obs.isHidden } : obs
+    );
+    const updatedSettings = {
+      ...resSettings,
+      customObservations: updatedObs,
+    };
+    await updateAdminSettings({ researchReportSettings: updatedSettings });
+  };
+
+  const handleDeleteObs = async (id: string) => {
+    if (!confirm('আপনি কি এই পর্যবেক্ষণ মুছে ফেলতে নিশ্চিত?')) return;
+    const currentObs = resSettings.customObservations || [];
+    const updatedObs = currentObs.filter((obs) => obs.id !== id);
+    const updatedSettings = {
+      ...resSettings,
+      customObservations: updatedObs,
+    };
+    await updateAdminSettings({ researchReportSettings: updatedSettings });
   };
 
   const handleAddCatSubmit = (e: React.FormEvent) => {
@@ -227,6 +344,15 @@ export const AdminPanelView: React.FC = () => {
           <span>📊 লাইভ রিপোর্ট</span>
         </button>
         <button
+          onClick={() => setActiveAdminTab('research')}
+          className={`flex-1 py-2 px-3 rounded-xl transition-all whitespace-nowrap flex items-center justify-center gap-1.5 ${
+            activeAdminTab === 'research' ? 'bg-amber-400 text-slate-950 font-black shadow-lg shadow-amber-400/20' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Sparkles className="w-4 h-4 text-amber-500" />
+          <span>🔬 গবেষণা পার্ট ২ সেটআপ</span>
+        </button>
+        <button
           onClick={() => setActiveAdminTab('balances')}
           className={`flex-1 py-2 px-3 rounded-xl transition-all whitespace-nowrap flex items-center justify-center gap-1.5 ${
             activeAdminTab === 'balances' ? 'bg-emerald-500 text-slate-950 font-black' : 'text-slate-400 hover:text-white'
@@ -272,6 +398,277 @@ export const AdminPanelView: React.FC = () => {
 
       {/* Live Reports Tab */}
       {activeAdminTab === 'reports' && <LiveReportSystem />}
+
+      {/* Research Part 2 Settings Admin Tab */}
+      {activeAdminTab === 'research' && (
+        <div className="space-y-6">
+          {/* Header Metadata Edit Form */}
+          <div className="bg-slate-900/90 border border-slate-800 p-5 rounded-3xl space-y-4 shadow-xl">
+            <div className="flex items-center gap-3 border-b border-slate-800 pb-3">
+              <div className="p-2.5 bg-amber-400/20 text-amber-400 rounded-2xl">
+                <FileText className="w-6 h-6" />
+              </div>
+              <div>
+                <h3 className="font-bold text-base text-white">গবেষণা পার্ট ২: হেডার ও অফিসিয়াল তথ্য</h3>
+                <p className="text-xs text-slate-400">তারিখ, রেফারেন্স ID এবং স্ট্যাটাস ম্যানুয়ালি আপডেট করুন</p>
+              </div>
+            </div>
+
+            <form onSubmit={handleSaveResearchHeader} className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">তারিখ (Date)</label>
+                <input
+                  type="text"
+                  value={resReportDate}
+                  onChange={(e) => setResReportDate(e.target.value)}
+                  placeholder="২৫/৭/২০২৬"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:border-amber-400 focus:outline-none font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">রেফারেন্স ID (Reference ID)</label>
+                <input
+                  type="text"
+                  value={resRefId}
+                  onChange={(e) => setResRefId(e.target.value)}
+                  placeholder="REF-RES2-2026"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:border-amber-400 focus:outline-none font-mono"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-300">স্ট্যাটাস (Status Text)</label>
+                <input
+                  type="text"
+                  value={resStatusText}
+                  onChange={(e) => setResStatusText(e.target.value)}
+                  placeholder="অনুমোদিত (VERIFIED)"
+                  className="w-full bg-slate-950 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:border-amber-400 focus:outline-none font-bold"
+                />
+              </div>
+
+              <div className="sm:col-span-3 pt-2">
+                <button
+                  type="submit"
+                  className="px-5 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black rounded-xl text-xs flex items-center gap-2 shadow-lg transition-all active:scale-95"
+                >
+                  <Check className="w-4 h-4" />
+                  <span>হেডার তথ্য সেভ করুন</span>
+                </button>
+              </div>
+            </form>
+          </div>
+
+          {/* Research Observations Management Form & List */}
+          <div className="bg-slate-900/90 border border-slate-800 p-5 rounded-3xl space-y-5 shadow-xl">
+            <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+              <div className="flex items-center gap-3">
+                <div className="p-2.5 bg-emerald-500/20 text-emerald-400 rounded-2xl">
+                  <Sparkles className="w-6 h-6" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-base text-white">গবেষণা পর্যবেক্ষণ ব্যবস্থাপনা (Add, Edit, Hide, Delete)</h3>
+                  <p className="text-xs text-slate-400">গবেষণা পার্ট ২ রিপোর্টে সরাসরি প্রদার্শিত পর্যবেক্ষণ কার্ডসমূহ পরিবর্তন করুন</p>
+                </div>
+              </div>
+            </div>
+
+            {/* Form to Add / Edit Observation */}
+            <form onSubmit={handleAddOrUpdateObservation} className="bg-slate-950/80 border border-slate-800 p-4 rounded-2xl space-y-3">
+              <div className="flex items-center justify-between border-b border-slate-800 pb-2">
+                <span className="text-xs font-bold text-amber-400 flex items-center gap-1">
+                  {editingObsId ? <Edit3 className="w-3.5 h-3.5" /> : <Plus className="w-3.5 h-3.5" />}
+                  <span>{editingObsId ? 'পর্যবেক্ষণ এডিট করুন' : 'নতুন গবেষণা পর্যবেক্ষণ যোগ করুন'}</span>
+                </span>
+                {editingObsId && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setEditingObsId(null);
+                      setNewObsTitle('');
+                      setNewObsContent('');
+                      setNewObsType('warning');
+                    }}
+                    className="text-[11px] text-rose-400 hover:underline flex items-center gap-1"
+                  >
+                    <X className="w-3 h-3" />
+                    <span>বাতিল</span>
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-300">পর্যবেক্ষণ শিরোনাম (Title)</label>
+                <input
+                  type="text"
+                  value={newObsTitle}
+                  onChange={(e) => setNewObsTitle(e.target.value)}
+                  placeholder="যেমন: গবেষণা পর্যবেক্ষণ ১: শীর্ষ ব্যয় খাত বিশ্লেষণ"
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-400 font-bold"
+                />
+              </div>
+
+              <div className="space-y-1">
+                <label className="text-[11px] font-bold text-slate-300">পর্যবেক্ষণ বিবরণ (Details / Content)</label>
+                <textarea
+                  value={newObsContent}
+                  onChange={(e) => setNewObsContent(e.target.value)}
+                  placeholder="যেমন: চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে বিল খাতে..."
+                  rows={3}
+                  className="w-full bg-slate-900 border border-slate-800 rounded-xl p-2.5 text-xs text-white focus:outline-none focus:border-emerald-400"
+                />
+              </div>
+
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-3 pt-1">
+                <div className="flex items-center gap-3">
+                  <span className="text-xs font-bold text-slate-400">কার্ড কালার ধরন:</span>
+                  <div className="flex items-center gap-2">
+                    <button
+                      type="button"
+                      onClick={() => setNewObsType('warning')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                        newObsType === 'warning'
+                          ? 'bg-amber-400 text-slate-950 border-amber-400'
+                          : 'bg-slate-900 text-amber-400 border-amber-400/40'
+                      }`}
+                    >
+                      অ্যাম্বার / হলুদ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewObsType('success')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                        newObsType === 'success'
+                          ? 'bg-emerald-500 text-slate-950 border-emerald-500'
+                          : 'bg-slate-900 text-emerald-400 border-emerald-500/40'
+                      }`}
+                    >
+                      সবুজ
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setNewObsType('info')}
+                      className={`px-2.5 py-1 rounded-lg text-[11px] font-bold border transition-all ${
+                        newObsType === 'info'
+                          ? 'bg-indigo-500 text-white border-indigo-500'
+                          : 'bg-slate-900 text-indigo-400 border-indigo-500/40'
+                      }`}
+                    >
+                      নীল
+                    </button>
+                  </div>
+                </div>
+
+                <button
+                  type="submit"
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-black rounded-xl text-xs flex items-center gap-1.5 shadow-md active:scale-95 transition-all"
+                >
+                  <Plus className="w-4 h-4" />
+                  <span>{editingObsId ? 'আপডেট করুন' : 'যোগ করুন'}</span>
+                </button>
+              </div>
+            </form>
+
+            {/* List of Observations */}
+            <div className="space-y-3 pt-2">
+              <h4 className="text-xs font-bold text-slate-300 uppercase tracking-wider">
+                বর্তমান পর্যবেক্ষণ তালিকা (মোট: {(resSettings.customObservations || []).length}টি)
+              </h4>
+
+              {(resSettings.customObservations || []).length === 0 ? (
+                <p className="text-xs text-slate-500 italic p-4 text-center bg-slate-950 rounded-2xl border border-slate-800">
+                  কোনো কাস্টম গবেষণা পর্যবেক্ষণ নেই। উপরে থেকে নতুন যোগ করুন।
+                </p>
+              ) : (
+                <div className="space-y-3">
+                  {(resSettings.customObservations || []).map((obs) => (
+                    <div
+                      key={obs.id}
+                      className={`p-4 rounded-2xl border transition-all space-y-2 ${
+                        obs.isHidden
+                          ? 'bg-slate-950/40 border-slate-800/60 opacity-60'
+                          : obs.type === 'success'
+                          ? 'bg-slate-950 border-emerald-500/30'
+                          : obs.type === 'info'
+                          ? 'bg-slate-950 border-indigo-500/30'
+                          : 'bg-slate-950 border-amber-500/30'
+                      }`}
+                    >
+                      <div className="flex items-start justify-between gap-3">
+                        <div className="space-y-1">
+                          <div className="flex items-center gap-2">
+                            <span
+                              className={`text-[10px] font-bold px-2 py-0.5 rounded-full uppercase ${
+                                obs.type === 'success'
+                                  ? 'bg-emerald-500/20 text-emerald-400'
+                                  : obs.type === 'info'
+                                  ? 'bg-indigo-500/20 text-indigo-400'
+                                  : 'bg-amber-400/20 text-amber-400'
+                              }`}
+                            >
+                              {obs.type === 'success' ? 'সবুজ' : obs.type === 'info' ? 'নীল' : 'অ্যাম্বার'}
+                            </span>
+                            <h5 className="text-xs font-black text-white">{obs.title}</h5>
+                            {obs.isHidden && (
+                              <span className="text-[10px] bg-rose-500/20 text-rose-400 font-bold px-1.5 py-0.5 rounded">
+                                হাইড করা আছে
+                              </span>
+                            )}
+                          </div>
+                          <p className="text-xs text-slate-300 leading-relaxed">{obs.content}</p>
+                        </div>
+
+                        {/* Action Buttons */}
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          {/* Hide / Show Toggle */}
+                          <button
+                            type="button"
+                            onClick={() => handleToggleHideObs(obs.id)}
+                            className={`p-1.5 rounded-lg border transition-all ${
+                              obs.isHidden
+                                ? 'bg-slate-800 text-slate-400 border-slate-700 hover:text-white'
+                                : 'bg-amber-400/10 text-amber-400 border-amber-400/30 hover:bg-amber-400/20'
+                            }`}
+                            title={obs.isHidden ? 'শো করুন' : 'হাইড করুন'}
+                          >
+                            {obs.isHidden ? <EyeOff className="w-3.5 h-3.5" /> : <Eye className="w-3.5 h-3.5" />}
+                          </button>
+
+                          {/* Edit Button */}
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setEditingObsId(obs.id);
+                              setNewObsTitle(obs.title);
+                              setNewObsContent(obs.content);
+                              setNewObsType(obs.type || 'warning');
+                            }}
+                            className="p-1.5 bg-slate-800 text-indigo-400 hover:bg-indigo-500 hover:text-white rounded-lg border border-slate-700 transition-all"
+                            title="এডিট করুন"
+                          >
+                            <Edit3 className="w-3.5 h-3.5" />
+                          </button>
+
+                          {/* Delete Button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteObs(obs.id)}
+                            className="p-1.5 bg-rose-500/10 text-rose-400 hover:bg-rose-500 hover:text-white rounded-lg border border-rose-500/30 transition-all"
+                            title="ডিলিট করুন"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Main & Initial Balances Admin Tab */}
       {activeAdminTab === 'balances' && (

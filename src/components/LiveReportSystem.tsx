@@ -1,5 +1,7 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import { useMoney } from '../context/MoneyContext';
+import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import {
   PieChart as PieChartIcon,
   BarChart3,
@@ -19,6 +21,7 @@ import {
   Award,
   ShieldCheck,
   TrendingDown,
+  Loader2,
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -37,7 +40,52 @@ import {
 import { motion } from 'motion/react';
 
 export const LiveReportSystem: React.FC = () => {
-  const { transactions, budgets, expenseCategories, incomeCategories, currentTheme } = useMoney();
+  const { transactions, budgets, expenseCategories, incomeCategories, currentTheme, adminSettings } = useMoney();
+
+  // Printable sheet ref and PDF state
+  const printableSheetRef = useRef<HTMLDivElement>(null);
+  const [isGeneratingPDF, setIsGeneratingPDF] = useState(false);
+
+  const handleDownloadPDF = async () => {
+    if (!printableSheetRef.current) return;
+    try {
+      setIsGeneratingPDF(true);
+      const element = printableSheetRef.current;
+      const canvas = await html2canvas(element, {
+        scale: 2,
+        useCORS: true,
+        logging: false,
+        backgroundColor: '#FFFFFF',
+      });
+      const imgData = canvas.toDataURL('image/png');
+      const pdf = new jsPDF('p', 'mm', 'a4');
+      const pdfWidth = pdf.internal.pageSize.getWidth(); // 210
+      const pdfHeight = pdf.internal.pageSize.getHeight(); // 297
+
+      const imgWidth = pdfWidth;
+      const imgHeight = (canvas.height * pdfWidth) / canvas.width;
+
+      let heightLeft = imgHeight;
+      let position = 0;
+
+      pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+      heightLeft -= pdfHeight;
+
+      while (heightLeft > 0) {
+        position = heightLeft - imgHeight;
+        pdf.addPage();
+        pdf.addImage(imgData, 'PNG', 0, position, imgWidth, imgHeight);
+        heightLeft -= pdfHeight;
+      }
+
+      pdf.save(`AI_Money_Manager_Research_Report_${new Date().toISOString().substring(0, 10)}.pdf`);
+    } catch (err) {
+      console.error('PDF generation error:', err);
+      alert('PDF ডাউনলোড করতে সমস্যা হয়েছে। অনুগ্রহ করে আবার চেষ্টা করুন।');
+    } finally {
+      setIsGeneratingPDF(false);
+    }
+  };
 
   // Top Main View Selector: 'categoryChart' | 'accounts' | 'analysis' | 'excel' | 'researchPart2'
   const [activeView, setActiveView] = useState<'categoryChart' | 'accounts' | 'analysis' | 'excel' | 'researchPart2'>('categoryChart');
@@ -956,7 +1004,7 @@ export const LiveReportSystem: React.FC = () => {
       {/* ================= VIEW 5: RESEARCH PART 2 (A4 PRINTABLE REPORT) ================= */}
       {activeView === 'researchPart2' && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
-          {/* Top Bar with Print Controls */}
+          {/* Top Bar with Print & Download Controls */}
           <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
@@ -968,17 +1016,40 @@ export const LiveReportSystem: React.FC = () => {
               </p>
             </div>
 
-            <button
-              onClick={() => window.print()}
-              className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg shrink-0 transition-all active:scale-95"
-            >
-              <Printer className="w-4 h-4" />
-              <span>📄 A4 সাইজ প্রিন্ট / PDF সেভ</span>
-            </button>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleDownloadPDF}
+                disabled={isGeneratingPDF}
+                className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 disabled:opacity-50 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg shrink-0 transition-all active:scale-95 cursor-pointer"
+              >
+                {isGeneratingPDF ? (
+                  <>
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                    <span>PDF ডাউনলোড হচ্ছে...</span>
+                  </>
+                ) : (
+                  <>
+                    <Download className="w-4 h-4" />
+                    <span>📥 A4 PDF ডাউনলোড</span>
+                  </>
+                )}
+              </button>
+
+              <button
+                onClick={() => window.print()}
+                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg shrink-0 transition-all active:scale-95"
+              >
+                <Printer className="w-4 h-4" />
+                <span>📄 A4 প্রিন্ট</span>
+              </button>
+            </div>
           </div>
 
           {/* Printable A4 Document Sheet */}
-          <div className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-2xl border border-slate-200 max-w-4xl mx-auto space-y-6 font-sans print:shadow-none print:border-none print:p-0 print:m-0">
+          <div
+            ref={printableSheetRef}
+            className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-2xl border border-slate-200 max-w-4xl mx-auto space-y-6 font-sans print:shadow-none print:border-none print:p-0 print:m-0"
+          >
             {/* 1. Official Header / Letterhead */}
             <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
               <div>
@@ -996,9 +1067,20 @@ export const LiveReportSystem: React.FC = () => {
               </div>
 
               <div className="text-right text-xs text-slate-600 space-y-0.5 font-mono">
-                <p><span className="font-bold text-slate-800">তারিখ:</span> {new Date().toLocaleDateString('bn-BD')}</p>
-                <p><span className="font-bold text-slate-800">রেফারেন্স ID:</span> REF-RES2-2026</p>
-                <p><span className="font-bold text-slate-800">স্ট্যাটাস:</span> <span className="text-emerald-700 font-bold">অনুমোদিত (VERIFIED)</span></p>
+                <p>
+                  <span className="font-bold text-slate-800">তারিখ:</span>{' '}
+                  {adminSettings.researchReportSettings?.reportDate || '২৫/৭/২০২৬'}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-800">রেফারেন্স ID:</span>{' '}
+                  {adminSettings.researchReportSettings?.refId || 'REF-RES2-2026'}
+                </p>
+                <p>
+                  <span className="font-bold text-slate-800">স্ট্যাটাস:</span>{' '}
+                  <span className="text-emerald-700 font-bold">
+                    {adminSettings.researchReportSettings?.statusText || 'অনুমোদিত (VERIFIED)'}
+                  </span>
+                </p>
               </div>
             </div>
 
@@ -1044,25 +1126,58 @@ export const LiveReportSystem: React.FC = () => {
 
               {/* Research Insights Cards */}
               <div className="space-y-2 text-xs text-slate-700">
-                <div className="p-3 bg-white border-l-4 border-amber-500 rounded-r-lg space-y-1 shadow-sm">
-                  <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
-                    <span>গবেষণা পর্যবেক্ষণ ১: শীর্ষ ব্যয় খাত বিশ্লেষণ</span>
-                  </p>
-                  <p className="text-slate-600">
-                    চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে <span className="font-bold text-slate-950">{categoryList[0]?.name || 'খাদ্য'}</span> খাতে। এই খাতে আপনার মোট খরচের <span className="font-bold text-slate-950">{categoryList[0]?.percentage.toFixed(1) || '36.98'}%</span> ব্যয় হয়েছে।
-                  </p>
-                </div>
+                {(adminSettings.researchReportSettings?.customObservations || []).filter((obs) => !obs.isHidden).length > 0 ? (
+                  (adminSettings.researchReportSettings?.customObservations || [])
+                    .filter((obs) => !obs.isHidden)
+                    .map((obs) => (
+                      <div
+                        key={obs.id}
+                        className={`p-3 bg-white border-l-4 rounded-r-lg space-y-1 shadow-sm ${
+                          obs.type === 'success'
+                            ? 'border-emerald-500'
+                            : obs.type === 'info'
+                            ? 'border-indigo-500'
+                            : 'border-amber-500'
+                        }`}
+                      >
+                        <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                          <CheckCircle2
+                            className={`w-3.5 h-3.5 ${
+                              obs.type === 'success'
+                                ? 'text-emerald-600'
+                                : obs.type === 'info'
+                                ? 'text-indigo-600'
+                                : 'text-amber-600'
+                            }`}
+                          />
+                          <span>{obs.title}</span>
+                        </p>
+                        <p className="text-slate-600 leading-relaxed">{obs.content}</p>
+                      </div>
+                    ))
+                ) : (
+                  <>
+                    <div className="p-3 bg-white border-l-4 border-amber-500 rounded-r-lg space-y-1 shadow-sm">
+                      <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <CheckCircle2 className="w-3.5 h-3.5 text-amber-600" />
+                        <span>গবেষণা পর্যবেক্ষণ ১: শীর্ষ ব্যয় খাত বিশ্লেষণ</span>
+                      </p>
+                      <p className="text-slate-600">
+                        চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে <span className="font-bold text-slate-950">{categoryList[0]?.name || 'খাদ্য'}</span> খাতে। এই খাতে আপনার মোট খরচের <span className="font-bold text-slate-950">{categoryList[0]?.percentage.toFixed(1) || '36.98'}%</span> ব্যয় হয়েছে।
+                      </p>
+                    </div>
 
-                <div className="p-3 bg-white border-l-4 border-emerald-500 rounded-r-lg space-y-1 shadow-sm">
-                  <p className="font-bold text-slate-900 flex items-center gap-1.5">
-                    <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
-                    <span>গবেষণা পর্যবেক্ষণ ২: বাজেট সাশ্রয় ও মূলধন সুরক্ষা</span>
-                  </p>
-                  <p className="text-slate-600">
-                    আপনার মোট নির্ধারিত বাজেটের <span className="font-bold text-emerald-700">{(100 - parseFloat(budgetUsedPercent)).toFixed(1)}%</span> অর্থ এখনও সাশ্রয় রয়েছে, যা ভবিষ্যতের যে কোনো জরুরি খরচে ব্যবহারের উপযোগী।
-                  </p>
-                </div>
+                    <div className="p-3 bg-white border-l-4 border-emerald-500 rounded-r-lg space-y-1 shadow-sm">
+                      <p className="font-bold text-slate-900 flex items-center gap-1.5">
+                        <ShieldCheck className="w-3.5 h-3.5 text-emerald-600" />
+                        <span>গবেষণা পর্যবেক্ষণ ২: বাজেট সাশ্রয় ও মূলধন সুরক্ষা</span>
+                      </p>
+                      <p className="text-slate-600">
+                        আপনার মোট নির্ধারিত বাজেটের <span className="font-bold text-emerald-700">{(100 - parseFloat(budgetUsedPercent)).toFixed(1)}%</span> অর্থ এখনও সাশ্রয় রয়েছে, যা ভবিষ্যতের যে কোনো জরুরি খরচে ব্যবহারের উপযোগী।
+                      </p>
+                    </div>
+                  </>
+                )}
               </div>
             </div>
 

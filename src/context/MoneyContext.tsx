@@ -148,33 +148,32 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [notifications, setNotifications] = useState<NotificationItem[]>([
     {
       id: 'n_1',
-      title: 'লাইভ ফায়ারবেস সিঙ্ক',
-      message: 'ফায়ারবেস রিয়েলটাইম ডাটাবেস সক্রিয় রয়েছে।',
+      title: '🎉 AI মানি ম্যানেজারে স্বাগতম',
+      message: 'আপনার দৈনিক আয়-ব্যয় এবং হিসাব অটোমেশনের জন্য এআই রেডি!',
       date: new Date().toISOString().split('T')[0],
-      type: 'budget',
+      type: 'info',
       isRead: false,
     },
   ]);
 
   const [chatHistory, setChatHistory] = useState<ChatMessage[]>([
     {
-      id: 'c_welcome',
+      id: 'msg_welcome',
       sender: 'ai',
-      text: 'আসসালামু আলাইকুম! আমি আপনার AI Money Assistant। আপনি সংক্ষেপে ভয়েস বা টেক্সটে লিখুন, যেমন: "আমার এখানে ৫০০ টাকা আয় হয়েছে" বা "নাস্তায় ৫০ টাকা ব্যয়" - আমি সরাসরি ফায়ারবেস লাইভ ডাটাবেসে সেভ করে দেব!',
+      text: 'আসসালামু আলাইকুম বন্ধু! 🤖\nআমি আপনার এআই মানি ম্যানেজার। আপনার দৈনিক খরচ, আয়, বাজার কিংবা ঋণের কথা বলুন—আমি অটোমেটিক ক্যাটাগরি তৈরি করে আপনার ডাটাবেজে জমা করে দেব!',
       timestamp: Date.now(),
     },
   ]);
 
   const [userProfile, setUserProfile] = useState<UserProfile>({
     name: 'তাহসিন',
-    email: 'user@example.com',
-    currency: '৳',
-    isPremium: true,
+    email: 'tahsin456gf@gmail.com',
+    currency: 'BDT',
+    currencySymbol: '৳',
+    language: 'bn',
+    darkMode: true,
     pinLockEnabled: false,
     pinCode: '1234',
-    familyOrBusinessMode: 'personal',
-    darkMode: true,
-    language: 'bn',
   });
 
   const [adminSettings, setAdminSettings] = useState<AdminSettings>({
@@ -192,14 +191,14 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         {
           id: 'obs_1',
           title: 'গবেষণা পর্যবেক্ষণ ১: শীর্ষ ব্যয় খাত বিশ্লেষণ',
-          content: 'চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে বিল খাতে। এই খাতে আপনার মোট খরচের 68.6% ব্যয় হয়েছে।',
+          content: 'চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে বিল ও বাজার খাতে।',
           type: 'warning',
           isHidden: false,
         },
         {
           id: 'obs_2',
           title: 'গবেষণা পর্যবেক্ষণ ২: বাজেট সাশ্রয় ও মূলধন সুরক্ষা',
-          content: 'আপনার মোট নির্ধারিত বাজেটের 93.0% অর্থ এখনও সাশ্রয় রয়েছে, যা ভবিষ্যতের যে কোনো জরুরি খরচে ব্যবহারের উপযোগী।',
+          content: 'আপনার মোট নির্ধারিত বাজেটের সাশ্রয়ী অর্থ সঞ্চয় অ্যাকাউন্টে সুরক্ষিত রয়েছে।',
           type: 'success',
           isHidden: false,
         },
@@ -212,7 +211,6 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // Transactions
     const unsubTx = onSnapshot(collection(db, 'transactions'), async (snapshot) => {
       if (snapshot.empty) {
-        // Seed initial transactions to Firestore
         for (const item of INITIAL_TRANSACTIONS) {
           await setDoc(doc(db, 'transactions', item.id), item);
         }
@@ -255,8 +253,26 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         }
       } else {
         const list: Category[] = snapshot.docs.map((d) => d.data() as Category);
-        setIncomeCategories(list.filter((c) => c.type === 'income'));
-        setExpenseCategories(list.filter((c) => c.type === 'expense'));
+
+        // Deduplicate categories by clean Bengali name to avoid multiple buttons for same category
+        const dedupe = (cats: Category[]) => {
+          const seen = new Set<string>();
+          return cats.filter((c) => {
+            const clean = (c.nameBn || c.name || '')
+              .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
+              .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
+              .trim()
+              .toLowerCase();
+            if (!clean || seen.has(clean)) {
+              return false;
+            }
+            seen.add(clean);
+            return true;
+          });
+        };
+
+        setIncomeCategories(dedupe(list.filter((c) => c.type === 'income')));
+        setExpenseCategories(dedupe(list.filter((c) => c.type === 'expense')));
       }
     });
 
@@ -298,8 +314,6 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const unsubProfile = onSnapshot(doc(db, 'userProfile', 'main'), (docSnap) => {
       if (docSnap.exists()) {
         setUserProfile(docSnap.data() as UserProfile);
-      } else {
-        setDoc(doc(db, 'userProfile', 'main'), userProfile);
       }
     });
 
@@ -307,8 +321,6 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const unsubAdmin = onSnapshot(doc(db, 'adminSettings', 'main'), (docSnap) => {
       if (docSnap.exists()) {
         setAdminSettings(docSnap.data() as AdminSettings);
-      } else {
-        setDoc(doc(db, 'adminSettings', 'main'), adminSettings);
       }
     });
 
@@ -325,7 +337,6 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     };
   }, []);
 
-  // Handle PIN lock status
   useEffect(() => {
     if (userProfile.pinLockEnabled) {
       setIsPinUnlocked(false);
@@ -341,13 +352,83 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   // Transaction Actions (Firestore) - Optimistic updates for zero lag!
   const addTransaction = async (tx: Omit<Transaction, 'id' | 'createdAt'>) => {
     const id = 'tx_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4);
+    const positiveAmount = Math.abs(Number(tx.amount) || 0);
+
+    // 1. Check if Category exists; match existing category or create a new one
+    const catList = tx.type === 'income' ? incomeCategories : expenseCategories;
+    const cleanCatTarget = tx.category
+      ? tx.category
+          .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
+          .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
+          .trim()
+          .toLowerCase()
+      : '';
+
+    const matchedCat = catList.find((c) => {
+      const nameBnClean = c.nameBn
+        ? c.nameBn
+            .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
+            .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
+            .trim()
+            .toLowerCase()
+        : '';
+      const nameClean = c.name
+        ? c.name
+            .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
+            .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
+            .trim()
+            .toLowerCase()
+        : '';
+
+      if (c.nameBn === tx.category || c.name === tx.category || c.id === tx.category) return true;
+      if (cleanCatTarget.length >= 2) {
+        if (nameBnClean === cleanCatTarget || nameClean === cleanCatTarget) return true;
+        if (nameBnClean.includes(cleanCatTarget) || cleanCatTarget.includes(nameBnClean)) return true;
+      }
+      return false;
+    });
+
+    let resolvedCategoryName = tx.category;
+
+    if (matchedCat) {
+      // Use exact category name from existing category to prevent creating duplicate category buttons!
+      resolvedCategoryName = matchedCat.nameBn || matchedCat.name;
+    } else if (tx.category) {
+      // Create new category ONLY when no matching category exists anywhere
+      const iconMatch = tx.category.match(/^(\p{Extended_Pictographic}|\p{Emoji})/u);
+      const icon = iconMatch ? iconMatch[0] : tx.type === 'income' ? '💰' : '🏷️';
+      const cleanName = tx.category.replace(/^(\p{Extended_Pictographic}|\p{Emoji})\s*/u, '').trim() || tx.category;
+      resolvedCategoryName = iconMatch ? tx.category : `${icon} ${cleanName}`;
+
+      const newCat: Category = {
+        id: 'cat_' + Date.now() + '_' + Math.random().toString(36).substring(2, 5),
+        name: cleanName,
+        nameBn: resolvedCategoryName,
+        type: tx.type,
+        icon,
+        color: tx.type === 'income' ? '#10B981' : '#EF4444',
+        isCustom: true,
+        isHidden: false,
+      };
+
+      if (tx.type === 'income') {
+        setIncomeCategories((prev) => [...prev, newCat]);
+      } else {
+        setExpenseCategories((prev) => [...prev, newCat]);
+      }
+
+      setDoc(doc(db, 'categories', newCat.id), newCat).catch((err) => console.error('Category save error:', err));
+    }
+
     const newTx: Transaction = {
       ...tx,
+      category: resolvedCategoryName,
+      amount: positiveAmount,
       id,
       createdAt: Date.now(),
     };
 
-    // Optimistically update local React state immediately to fix any lag!
+    // 2. Optimistically update local React state immediately to fix any lag!
     setTransactions((prev) => [newTx, ...prev]);
 
     // Save to Firestore in background
@@ -474,7 +555,8 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       status: 'pending',
       createdAt: Date.now(),
     };
-    await setDoc(doc(db, 'debts', id), newDebt);
+    setDebts((prev) => [newDebt, ...prev]);
+    await setDoc(doc(db, 'debts', id), newDebt).catch((err) => console.error(err));
   };
 
   const payDebt = async (id: string, amount: number) => {
@@ -550,17 +632,18 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Budget Actions (Firestore)
   const setBudgetTarget = async (categoryId: string, monthlyTarget: number) => {
-    const exists = budgets.find((b) => b.categoryId === categoryId);
-    if (exists) {
-      await updateDoc(doc(db, 'budgets', exists.id), { monthlyTarget });
+    const existing = budgets.find((b) => b.categoryId === categoryId);
+    if (existing) {
+      await updateDoc(doc(db, 'budgets', existing.id), { monthlyTarget });
     } else {
       const id = 'b_' + Date.now();
-      await setDoc(doc(db, 'budgets', id), {
+      const newB: Budget = {
         id,
         categoryId,
         monthlyTarget,
-        alertThresholdPercent: 80,
-      });
+        alertThresholdPercent: 85,
+      };
+      await setDoc(doc(db, 'budgets', id), newB);
     }
   };
 
@@ -570,18 +653,18 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
   // Savings Actions (Firestore)
   const addSavingsGoal = async (goal: Omit<SavingsGoal, 'id' | 'createdAt' | 'currentAmount'>) => {
-    const id = 'sg_' + Date.now();
-    const newGoal: SavingsGoal = {
+    const id = 's_' + Date.now();
+    const newS: SavingsGoal = {
       ...goal,
       id,
       currentAmount: 0,
       createdAt: Date.now(),
     };
-    await setDoc(doc(db, 'savingsGoals', id), newGoal);
+    await setDoc(doc(db, 'savingsGoals', id), newS);
   };
 
   const depositSavings = async (id: string, amount: number) => {
-    const goal = savingsGoals.find((g) => g.id === id);
+    const goal = savingsGoals.find((s) => s.id === id);
     if (!goal) return;
     await updateDoc(doc(db, 'savingsGoals', id), {
       currentAmount: goal.currentAmount + amount,
@@ -589,7 +672,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   const withdrawSavings = async (id: string, amount: number) => {
-    const goal = savingsGoals.find((g) => g.id === id);
+    const goal = savingsGoals.find((s) => s.id === id);
     if (!goal) return;
     await updateDoc(doc(db, 'savingsGoals', id), {
       currentAmount: Math.max(0, goal.currentAmount - amount),
@@ -600,28 +683,21 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await deleteDoc(doc(db, 'savingsGoals', id));
   };
 
-  // Chat Local / History
+  // Chat Actions
   const addChatMessage = (msg: Omit<ChatMessage, 'id' | 'timestamp'>) => {
     const newMsg: ChatMessage = {
       ...msg,
-      id: 'chat_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+      id: 'msg_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
       timestamp: Date.now(),
     };
     setChatHistory((prev) => [...prev, newMsg]);
   };
 
   const clearChatHistory = () => {
-    setChatHistory([
-      {
-        id: 'c_welcome',
-        sender: 'ai',
-        text: 'চ্যাট হিস্টোরি রিসেট করা হয়েছে। আপনার নতুন প্রশ্ন বা আয়/ব্যয় জানান!',
-        timestamp: Date.now(),
-      },
-    ]);
+    setChatHistory([]);
   };
 
-  // User Profile & Admin Settings (Firestore)
+  // Admin & System
   const updateUserProfile = async (profile: Partial<UserProfile>) => {
     const updated = { ...userProfile, ...profile };
     setUserProfile(updated);
@@ -634,50 +710,49 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     await setDoc(doc(db, 'adminSettings', 'main'), updated);
   };
 
+  const markNotificationRead = (id: string) => {
+    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
+  };
+
+  const clearNotifications = () => {
+    setNotifications([]);
+  };
+
   const exportDatabaseJSON = () => {
-    const fullData = {
+    const data = {
       transactions,
+      transfers,
       debts,
       incomeCategories,
       expenseCategories,
+      paymentMethods,
       budgets,
       savingsGoals,
-      notifications,
       userProfile,
       adminSettings,
       exportedAt: new Date().toISOString(),
     };
-    const dataStr = 'data:text/json;charset=utf-8,' + encodeURIComponent(JSON.stringify(fullData, null, 2));
-    const downloadAnchor = document.createElement('a');
-    downloadAnchor.setAttribute('href', dataStr);
-    downloadAnchor.setAttribute('download', `ai_money_manager_backup_${new Date().toISOString().substring(0, 10)}.json`);
-    document.body.appendChild(downloadAnchor);
-    downloadAnchor.click();
-    downloadAnchor.remove();
+    const jsonStr = JSON.stringify(data, null, 2);
+    const blob = new Blob([jsonStr], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `AIMoneyManager_Backup_${new Date().toISOString().split('T')[0]}.json`;
+    link.click();
+    URL.revokeObjectURL(url);
   };
 
   const importDatabaseJSON = async (jsonString: string): Promise<boolean> => {
     try {
       const data = JSON.parse(jsonString);
-      if (Array.isArray(data.transactions)) {
-        for (const item of data.transactions) {
-          await setDoc(doc(db, 'transactions', item.id), item);
-        }
-      }
-      if (Array.isArray(data.debts)) {
-        for (const item of data.debts) {
-          await setDoc(doc(db, 'debts', item.id), item);
-        }
-      }
-      if (Array.isArray(data.incomeCategories) || Array.isArray(data.expenseCategories)) {
-        const all = [...(data.incomeCategories || []), ...(data.expenseCategories || [])];
-        for (const cat of all) {
-          await setDoc(doc(db, 'categories', cat.id), cat);
+      if (data.transactions && Array.isArray(data.transactions)) {
+        for (const t of data.transactions) {
+          await setDoc(doc(db, 'transactions', t.id), t);
         }
       }
       return true;
     } catch (e) {
-      console.error('Import Error:', e);
+      console.error('Import error:', e);
       return false;
     }
   };
@@ -689,20 +764,13 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     for (const d of debts) {
       await deleteDoc(doc(db, 'debts', d.id));
     }
-    for (const item of INITIAL_TRANSACTIONS) {
-      await setDoc(doc(db, 'transactions', item.id), item);
+    for (const t of INITIAL_TRANSACTIONS) {
+      await setDoc(doc(db, 'transactions', t.id), t);
     }
-    for (const item of INITIAL_DEBTS) {
-      await setDoc(doc(db, 'debts', item.id), item);
+    for (const d of INITIAL_DEBTS) {
+      await setDoc(doc(db, 'debts', d.id), d);
     }
-    clearChatHistory();
   };
-
-  const markNotificationRead = (id: string) => {
-    setNotifications((prev) => prev.map((n) => (n.id === id ? { ...n, isRead: true } : n)));
-  };
-
-  const clearNotifications = () => setNotifications([]);
 
   return (
     <MoneyContext.Provider

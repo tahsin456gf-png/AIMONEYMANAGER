@@ -57,11 +57,11 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
 
   const totalFilteredIncome = filteredTransactions
     .filter((t) => t.type === 'income')
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const totalFilteredExpense = filteredTransactions
     .filter((t) => t.type === 'expense')
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   // CSV Export
   const exportCSV = () => {

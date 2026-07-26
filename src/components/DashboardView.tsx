@@ -57,29 +57,29 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenAddModal, on
   // Calculations
   const totalIncome = transactions
     .filter((t) => t.type === 'income')
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const totalExpense = transactions
     .filter((t) => t.type === 'expense')
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const totalBalance = initialTotal + mainOffset + totalIncome - totalExpense;
 
   const todayIncome = transactions
     .filter((t) => t.type === 'income' && t.date === todayStr)
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const todayExpense = transactions
     .filter((t) => t.type === 'expense' && t.date === todayStr)
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const monthExpense = transactions
     .filter((t) => t.type === 'expense' && t.date.startsWith(currentMonthStr))
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const monthIncome = transactions
     .filter((t) => t.type === 'income' && t.date.startsWith(currentMonthStr))
-    .reduce((acc, t) => acc + t.amount, 0);
+    .reduce((acc, t) => acc + Math.abs(t.amount || 0), 0);
 
   const monthSavings = Math.max(0, monthIncome - monthExpense);
 

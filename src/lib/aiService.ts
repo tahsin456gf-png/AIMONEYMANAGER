@@ -4,9 +4,12 @@ import { GoogleGenAI, Type } from '@google/genai';
 export function toBnDigits(val: number | string | undefined | null): string {
   if (val === undefined || val === null || isNaN(Number(val))) return '০';
   const num = typeof val === 'string' ? parseFloat(val) : val;
-  const str = num.toLocaleString('en-US', { minimumFractionDigits: 0, maximumFractionDigits: 2 });
+  const isNegative = num < 0;
+  const absNum = Math.abs(num);
+  const str = absNum.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const bnDigits = ['০', '১', '২', '৩', '৪', '৫', '৬', '৭', '৮', '৯'];
-  return str.replace(/[0-9]/g, (w) => bnDigits[parseInt(w, 10)]);
+  const bnStr = str.replace(/[0-9]/g, (w) => bnDigits[parseInt(w, 10)]);
+  return isNegative ? `-${bnStr}` : bnStr;
 }
 
 // Utility to convert Bengali numerals to English numerals
@@ -63,7 +66,7 @@ export interface AIParseResult {
   };
   aiReplyMessage: string;
   structuredAction?: {
-    type: 'ADD_TRANSACTION' | 'ADD_DEBT';
+    type: 'ADD_TRANSACTION' | 'ADD_DEBT' | 'UPDATE_TRANSACTION' | 'DELETE_TRANSACTION';
     payload: any;
   };
 }
@@ -72,42 +75,44 @@ export interface AIParseResult {
 function computeWalletBreakdown(
   ctx: AIParseContext,
   opts: {
-    intent: 'EXPENSE' | 'INCOME' | 'PAWNA' | 'DENA' | 'SUMMARY' | 'GENERAL';
+    intent: 'EXPENSE' | 'INCOME' | 'PAWNA' | 'DENA' | 'SUMMARY' | 'GENERAL' | 'CORRECTION';
     category?: string;
     amount?: number;
     paymentMethod?: string;
     note?: string;
     personName?: string;
     date?: string;
+    wasDefaultMethod?: boolean;
+    correctionNote?: string;
   }
 ): string {
   const initBals = ctx.adminSettings?.initialBalances || {};
-  
-  // Default base initial balances matching user's account setup
-  let cashBal = initBals.Cash !== undefined ? Number(initBals.Cash) : 15;
-  let bkashBal = initBals.Bkash !== undefined ? Number(initBals.Bkash) : 576.54;
+
+  // Base initial account balances
+  let cashBal = initBals.Cash !== undefined ? Number(initBals.Cash) : 0;
+  let bkashBal = initBals.Bkash !== undefined ? Number(initBals.Bkash) : 0;
   let nagadBal = initBals.Nagad !== undefined ? Number(initBals.Nagad) : 0;
-  let rocketBal = initBals.Rocket !== undefined ? Number(initBals.Rocket) : 7.92;
-  let bankBal = initBals.Bank !== undefined ? Number(initBals.Bank) : 7198.15;
-  let dpsBal = initBals.DPS !== undefined ? Number(initBals.DPS) : 2000;
+  let rocketBal = initBals.Rocket !== undefined ? Number(initBals.Rocket) : 0;
+  let bankBal = initBals.Bank !== undefined ? Number(initBals.Bank) : 0;
+  let dpsBal = initBals.DPS !== undefined ? Number(initBals.DPS) : 0;
 
-  let upayBal = 49;
-  let tapBal = 5;
-  let islamicBal = 20;
-  let mcasBal = 1.59;
+  let totalIncome = 0;
+  let totalExpense = 0;
 
-  // Add all transactions from history
+  // Aggregate all transactions from history (ensuring Math.abs is used)
   (ctx.transactions || []).forEach((t: any) => {
-    const amt = Number(t.amount) || 0;
+    const amt = Math.abs(Number(t.amount) || 0);
     const method = (t.paymentMethod || 'Cash').toLowerCase();
 
     if (t.type === 'income') {
+      totalIncome += amt;
       if (method.includes('bkash') || method.includes('বিকাশ')) bkashBal += amt;
       else if (method.includes('nagad') || method.includes('নগদ')) nagadBal += amt;
       else if (method.includes('rocket') || method.includes('রকেট')) rocketBal += amt;
       else if (method.includes('bank') || method.includes('ব্যাংক') || method.includes('ibbplc')) bankBal += amt;
       else cashBal += amt;
     } else if (t.type === 'expense') {
+      totalExpense += amt;
       if (method.includes('bkash') || method.includes('বিকাশ')) bkashBal -= amt;
       else if (method.includes('nagad') || method.includes('নগদ')) nagadBal -= amt;
       else if (method.includes('rocket') || method.includes('রকেট')) rocketBal -= amt;
@@ -116,40 +121,56 @@ function computeWalletBreakdown(
     }
   });
 
-  // Include savings goals in DPS if present
-  if (ctx.savingsGoals && ctx.savingsGoals.length > 0) {
-    const savingsTotal = ctx.savingsGoals.reduce((sum: number, g: any) => sum + (Number(g.currentAmount) || 0), 0);
-    if (savingsTotal > 0) dpsBal = savingsTotal;
-  }
-
-  // Calculate Pawna (Lent money)
+  // Calculate Pawna (Lent) and Dena (Borrowed)
   let totalPawna = 0;
-  const pawnaPeople: { name: string; amount: number }[] = [];
+  let totalDena = 0;
+
   (ctx.debts || []).forEach((d: any) => {
-    if (d.type === 'pawna' && d.status !== 'settled') {
+    if (d.status !== 'settled') {
       const remaining = (Number(d.amount) || 0) - (Number(d.paidAmount) || 0);
       if (remaining > 0) {
-        totalPawna += remaining;
-        pawnaPeople.push({ name: d.personName || 'ব্যক্তি', amount: remaining });
+        if (d.type === 'pawna') {
+          totalPawna += remaining;
+        } else if (d.type === 'dena') {
+          totalDena += remaining;
+        }
       }
     }
   });
 
-  // Default fallback pawna people if none in debts list
-  if (totalPawna === 0) {
-    totalPawna = 3280;
-    pawnaPeople.push({ name: 'আম্মুর কাছ থেকে', amount: 1020 });
-    pawnaPeople.push({ name: 'সোহেল', amount: 2260 });
+  // Handle SUMMARY intent matching Screenshot #1 EXACTLY
+  if (opts.intent === 'SUMMARY') {
+    const netBalance = totalIncome - totalExpense;
+    const totalMFS = bkashBal + nagadBal + rocketBal;
+
+    return `🤖 AI Manager
+📊 আপনার হিসাবের সার্বিক সামারি
+
+💰 মোট আয় ও ব্যয়:
+• 📈 মোট আয়: ৳${toBnDigits(totalIncome)}
+• 📉 মোট ব্যয়: ৳${toBnDigits(totalExpense)}
+• ⚖️ নেট ব্যালেন্স: ৳${toBnDigits(netBalance)}
+
+💳 অ্যাকাউন্ট ব্যালেন্স:
+• 💵 পকেট (ক্যাশ): ৳${toBnDigits(cashBal)}
+• 📱 বিকাশ: ৳${toBnDigits(bkashBal)}
+• 📱 নগদ: ৳${toBnDigits(nagadBal)}
+• 🏦 ব্যাংক (IBBPLC): ৳${toBnDigits(bankBal)}
+• 📱 মোট MFS: ৳${toBnDigits(totalMFS)}
+
+🤝 দেনা ও পাওনা:
+• 📝 মোট পাওনা: ৳${toBnDigits(totalPawna)}
+• 💳 মোট দেনা: ৳${toBnDigits(totalDena)}`;
   }
 
-  const methodKey = (opts.paymentMethod || 'Bkash').toLowerCase();
+  // Handle single transaction intent
+  const methodKey = (opts.paymentMethod || 'Cash').toLowerCase();
 
-  // Selected payment method pre-balance
-  let prevMethodBal = bkashBal;
-  let methodNameBn = 'বিকাশ';
-  if (methodKey.includes('cash') || methodKey.includes('ক্যাশ') || methodKey.includes('পকেট')) {
-    prevMethodBal = cashBal;
-    methodNameBn = 'ক্যাশ';
+  let prevMethodBal = cashBal;
+  let methodNameBn = 'ক্যাশ (পকেট)';
+  if (methodKey.includes('bkash') || methodKey.includes('বিকাশ')) {
+    prevMethodBal = bkashBal;
+    methodNameBn = 'বিকাশ';
   } else if (methodKey.includes('nagad') || methodKey.includes('নগদ')) {
     prevMethodBal = nagadBal;
     methodNameBn = 'নগদ';
@@ -159,28 +180,24 @@ function computeWalletBreakdown(
   } else if (methodKey.includes('bank') || methodKey.includes('ব্যাংক') || methodKey.includes('ibbplc')) {
     prevMethodBal = bankBal;
     methodNameBn = 'IBBPLC ব্যাংক';
+  } else {
+    prevMethodBal = cashBal;
+    methodNameBn = 'ক্যাশ';
   }
 
-  // Amount & New balance after current transaction
-  const currentAmt = opts.amount || 0;
+  const currentAmt = Math.abs(opts.amount || 0);
   let newMethodBal = prevMethodBal;
-  if (opts.intent === 'EXPENSE') {
-    newMethodBal = prevMethodBal - currentAmt;
-    if (methodNameBn === 'বিকাশ') bkashBal -= currentAmt;
-    else if (methodNameBn === 'ক্যাশ') cashBal -= currentAmt;
-    else if (methodNameBn === 'নগদ') nagadBal -= currentAmt;
-    else if (methodNameBn === 'IBBPLC ব্যাংক') bankBal -= currentAmt;
-  } else if (opts.intent === 'INCOME') {
-    newMethodBal = prevMethodBal + currentAmt;
-    if (methodNameBn === 'বিকাশ') bkashBal += currentAmt;
-    else if (methodNameBn === 'ক্যাশ') cashBal += currentAmt;
-    else if (methodNameBn === 'নগদ') nagadBal += currentAmt;
-    else if (methodNameBn === 'IBBPLC ব্যাংক') bankBal += currentAmt;
-  }
+  if (opts.intent === "EXPENSE") newMethodBal = prevMethodBal - currentAmt;
+  else if (opts.intent === "INCOME") newMethodBal = prevMethodBal + currentAmt;
 
-  const totalMFS = bkashBal + nagadBal + rocketBal + upayBal + tapBal + islamicBal + mcasBal;
+  if (methodNameBn === "ক্যাশ") cashBal = newMethodBal;
+  else if (methodNameBn === "বিকাশ") bkashBal = newMethodBal;
+  else if (methodNameBn === "নগদ") nagadBal = newMethodBal;
+  else if (methodNameBn === "রকেট") rocketBal = newMethodBal;
+  else if (methodNameBn === "IBBPLC ব্যাংক") bankBal = newMethodBal;
 
-  // Build the Exact Screenshot Structure
+  const totalMFS = bkashBal + nagadBal + rocketBal;
+
   const bnDate = toBnDateStr(opts.date);
   const bnAmt = toBnDigits(currentAmt);
   const bnPrevMethodBal = toBnDigits(prevMethodBal);
@@ -188,69 +205,56 @@ function computeWalletBreakdown(
 
   const bnCash = toBnDigits(cashBal);
   const bnBkash = toBnDigits(bkashBal);
+  const bnNagad = toBnDigits(nagadBal);
   const bnTotalMFS = toBnDigits(totalMFS);
-  const bnRocket = toBnDigits(rocketBal);
   const bnBank = toBnDigits(bankBal);
   const bnTotalPawna = toBnDigits(totalPawna);
-  const bnDps = toBnDigits(dpsBal);
 
-  if (opts.intent === 'EXPENSE') {
-    return `নোট করা হলো দোস্ত। 🫡
+  const noteTip = opts.wasDefaultMethod
+    ? `\n💡 টিপস: মাধ্যম উল্লেখ না করায় ডিফল্টভাবে **${methodNameBn}** ধরা হয়েছে। অন্য মাধ্যমে হয়ে থাকলে "বিকাশে ছিল" বা "নগদে ছিল" বললে সংশোধন করে দেব!`
+    : "";
+
+    if (opts.intent === 'EXPENSE') {
+    return `নোট করা হলো বন্ধু! 🫡
 
 📅 ${bnDate}
 
-📱 ${opts.category || 'মোবাইল খরচ'}
+📝 খরচের বিবরণ (Expense)
 
-• 🌐 বিবরণ: ${opts.note || 'খরচ'}: ৳${bnAmt}
-• 💳 মাধ্যম: ${methodNameBn}
+• 🏷️ ক্যাটাগরি: ${opts.category || "🛒 বাজার"}
+• 💰 পরিমাণ: ৳${bnAmt}
+• 💳 লেনদেন মাধ্যম: ${methodNameBn}
+• 🌐 বিবরণ: ${opts.note || "দৈনিক খরচ"}
 
-📱 ${methodNameBn}-এর হিসাব
+📊 অ্যাকাউন্ট ব্যালেন্স আপডেট
 
-• আগের ${methodNameBn} ব্যালেন্স: ৳${bnPrevMethodBal}
-• ${opts.category || 'খরচ'} ক্রয়: -৳${bnAmt}
-
-📱 বর্তমান ${methodNameBn} ব্যালেন্স: ৳${bnNewMethodBal}
-
-📊 আপডেটেড অবস্থা
-
-• 💵 পকেট: ৳${bnCash}
-• 📱 বিকাশ: ৳${bnBkash}
-• 📱 মোট MFS: ৳${bnTotalMFS} (রকেট ${bnRocket} + উপায় ৪৯ + ট্যাপ ৫ + ইসলামিক ওয়ালেট ২০ + MCAS ১.৫৯ + বিকাশ ${bnBkash})
-• 🏦 IBBPLC: ৳${bnBank}
-• 📝 মোট পাওনা: ৳${bnTotalPawna}
-${pawnaPeople.map((p) => `• 👧 ${p.name} পাওনা: ৳${toBnDigits(p.amount)}`).join('\n')}
-• 💰 DPS সঞ্চয়: ৳${bnDps}`;
+• 💵 ${methodNameBn} ব্যালেন্স: ৳${bnPrevMethodBal} ➔ ৳${bnNewMethodBal}
+• 📱 মোট MFS (বিকাশ/নগদ): ৳${bnTotalMFS}
+• 🏦 ব্যাংক (IBBPLC): ৳${bnBank}${noteTip}`;
   }
 
   if (opts.intent === 'INCOME') {
-    return `নোট করা হলো দোস্ত। 🤑
+    return `নোট করা হলো বন্ধু! 🫡
 
 📅 ${bnDate}
 
-💰 ${opts.category || 'অন্যান্য আয়'}
+📝 আয়ের বিবরণ (Income)
 
-• 🌐 বিবরণ: ${opts.note || 'আয়'}: ৳${bnAmt}
-• 💳 মাধ্যম: ${methodNameBn}
-
-📱 ${methodNameBn}-এর হিসাব
-
-• আগের ${methodNameBn} ব্যালেন্স: ৳${bnPrevMethodBal}
-• আয় জমা: +৳${bnAmt}
-
-📱 বর্তমান ${methodNameBn} ব্যালেন্স: ৳${bnNewMethodBal}
+• 🏷️ ক্যাটাগরি: ${opts.category || "💰 অন্যান্য আয়"}
+• 💰 পরিমাণ: ৳${bnAmt}
+• 💳 জমা মাধ্যম: ${methodNameBn}
+• 🌐 বিবরণ: ${opts.note || "আয়"}
 
 📊 আপডেটেড অবস্থা
 
 • 💵 পকেট: ৳${bnCash}
 • 📱 বিকাশ: ৳${bnBkash}
-• 📱 মোট MFS: ৳${bnTotalMFS}
-• 🏦 IBBPLC: ৳${bnBank}
-• 📝 মোট পাওনা: ৳${bnTotalPawna}
-• 💰 DPS সঞ্চয়: ৳${bnDps}`;
+• 📱 নগদ: ৳${bnNagad}
+• 🏦 ব্যাংক: ৳${bnBank}`;
   }
 
   if (opts.intent === 'PAWNA') {
-    return `নোট করা হলো দোস্ত। 🫡
+    return `নোট করা হলো বন্ধু। 🫡
 
 📅 ${bnDate}
 
@@ -267,12 +271,11 @@ ${pawnaPeople.map((p) => `• 👧 ${p.name} পাওনা: ৳${toBnDigits(p.
 • 📱 মোট MFS: ৳${bnTotalMFS}
 • 🏦 IBBPLC: ৳${bnBank}
 • 📝 মোট পাওনা: ৳${toBnDigits(totalPawna + currentAmt)}
-• 👧 ${opts.personName || 'ব্যক্তি'} পাওনা: ৳${bnAmt}
-• 💰 DPS সঞ্চয়: ৳${bnDps}`;
+• 👧 ${opts.personName || 'ব্যক্তি'} পাওনা: ৳${bnAmt}`;
   }
 
   if (opts.intent === 'DENA') {
-    return `নোট করা হলো দোস্ত। 🫡
+    return `নোট করা হলো বন্ধু। 🫡
 
 📅 ${bnDate}
 
@@ -288,50 +291,251 @@ ${pawnaPeople.map((p) => `• 👧 ${p.name} পাওনা: ৳${toBnDigits(p.
 • 📱 বিকাশ: ৳${bnBkash}
 • 📱 মোট MFS: ৳${bnTotalMFS}
 • 🏦 IBBPLC: ৳${bnBank}
-• 📝 মোট পাওনা: ৳${bnTotalPawna}
-• 💰 DPS সঞ্চয়: ৳${bnDps}`;
+• 📝 মোট পাওনা: ৳${bnTotalPawna}`;
   }
 
-  // Default Summary Return
-  return `📊 বর্তমান আর্থিক সামারি ও পোর্টফোলিও রিপোর্ট 🤖
-
-📅 আজকের তারিখ: ${bnDate}
-
-📱 অ্যাকাউন্ট ও ওয়ালট অবস্থা:
-• 💵 পকেট (ক্যাশ): ৳${bnCash}
-• 📱 বিকাশ: ৳${bnBkash}
-• 📱 মোট MFS: ৳${bnTotalMFS}
-• 🏦 ব্যাংক (IBBPLC): ৳${bnBank}
-
-📝 দেনা ও পাওনা:
-• 📝 মোট পাওনা: ৳${bnTotalPawna}
-• 💰 DPS সঞ্চয়: ৳${bnDps}
-
-আপনার হিসাব নিরাপদ ও আপ-টু-ডেট আছে! কোনো নতুন আয়, খরচ বা ধারের কথা বলুন।`;
+  return computeWalletBreakdown(ctx, { intent: 'SUMMARY' });
 }
 
-// 1. Smart Local Bengali Financial & Conversational Parser
+// Smart Dynamic Category Finder
+function matchCategoryFromList(
+  prompt: string,
+  categoryList: any[] = [],
+  type: 'income' | 'expense'
+): string {
+  const lowerPrompt = prompt.toLowerCase();
+
+  const cleanStr = (s: string) =>
+    s ? s.replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '').replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '').trim().toLowerCase() : '';
+
+  const getCatName = (c: any): string => (typeof c === 'string' ? c : c.nameBn || c.name || '');
+
+  // Helper to search existing category list
+  const findExisting = (query: string) => {
+    const cleanQ = cleanStr(query);
+    if (!cleanQ || cleanQ.length < 2) return null;
+    return categoryList.find((c) => {
+      const name = getCatName(c);
+      const cleanName = cleanStr(name);
+      return cleanName === cleanQ || cleanName.includes(cleanQ) || cleanQ.includes(cleanName);
+    });
+  };
+
+  // 1. Search existing categories first (Admin or User pre-defined)
+  for (const cat of categoryList) {
+    if (!cat) continue;
+    const catNameBn = getCatName(cat);
+    const cleanBn = cleanStr(catNameBn);
+
+    if (cleanBn.length >= 2) {
+      if (lowerPrompt.includes(cleanBn)) {
+        return catNameBn;
+      }
+      // Check inflection root matching (e.g., "দোকান" matches "দোকানে", "দোকানের", "দোকান থেকে")
+      const rootRegex = new RegExp(`${cleanBn}(ে|িতে|ের|ে\\s*আয়|ে\\s*খরচ|ে\\s*থেকে|ের\\s*থেকে)?`, 'i');
+      if (rootRegex.test(lowerPrompt)) {
+        return catNameBn;
+      }
+    }
+  }
+
+  // 2. Keyword-based matching if existing list did not yield direct prompt match
+  if (type === 'expense') {
+    if (/দান|সদকা|সাহায্য|যাকাত|দান করেছি|দান করলাম|দানে/i.test(prompt)) {
+      const found = findExisting('দান') || categoryList.find((c) => getCatName(c).includes('দান') || getCatName(c).includes('সদকা'));
+      return found ? getCatName(found) : '🎁 দান/সদকা';
+    }
+    if (/বাজার|শাক|সবজি|মাছ|মাংস|চাল|ডাল|মুদি|গ্রোসারি|সুপারশপ/i.test(prompt)) {
+      const found = findExisting('বাজার') || categoryList.find((c) => getCatName(c).includes('বাজার') || getCatName(c).includes('মুদি'));
+      return found ? getCatName(found) : '🛒 বাজার';
+    }
+    if (/গাড়ি|বাস|রিকশা|ভাড়া|যাতায়াত|গাড়িতে|যানবাহন|সিএনজি|বাইক|ফুয়েল|তেল|অটো/i.test(prompt)) {
+      const found = findExisting('যানবাহন') || categoryList.find((c) => getCatName(c).includes('যানবাহন') || getCatName(c).includes('যাতায়াত') || getCatName(c).includes('গাড়ি'));
+      return found ? getCatName(found) : '🚌 যানবাহন';
+    }
+    if (/খাবার|চা|নাস্তা|খাইলাম|খেলাম|বিরিয়ানি|হোটেল|লাঞ্চ|ডিনার|রেস্টুরেন্ট|টিফিন|বার্গার|পিজ্জা/i.test(prompt)) {
+      const found = findExisting('খাদ্য') || categoryList.find((c) => getCatName(c).includes('খাদ্য') || getCatName(c).includes('খাবার'));
+      return found ? getCatName(found) : '🍔 খাদ্য';
+    }
+    if (/মোবাইল|এমবি|রিচার্জ|ফ্লেক্সি|জিবি|ফোন|সিম|ইন্টারনেট|নেট/i.test(prompt)) {
+      const found = findExisting('মোবাইল') || categoryList.find((c) => getCatName(c).includes('মোবাইল'));
+      return found ? getCatName(found) : '📱 মোবাইল';
+    }
+    if (/বিল|কারেন্ট|বিদ্যুৎ|গ্যাস|পানি|ওয়াইফাই/i.test(prompt)) {
+      const found = findExisting('বিল') || categoryList.find((c) => getCatName(c).includes('বিল'));
+      return found ? getCatName(found) : '⚡ বিল';
+    }
+    if (/চিকিৎসা|ওষুধ|ডাক্তার|মেডিসিন|হাসপাতাল|প্রেসক্রিপশন/i.test(prompt)) {
+      const found = findExisting('চিকিৎসা') || categoryList.find((c) => getCatName(c).includes('চিকিৎসা') || getCatName(c).includes('ওষুধ'));
+      return found ? getCatName(found) : '💊 চিকিৎসা';
+    }
+    if (/পোশাক|কাপড়|জামা|জুতা|প্যান্ট|শার্ট|শাড়ি|কুর্তি/i.test(prompt)) {
+      const found = findExisting('পোশাক') || categoryList.find((c) => getCatName(c).includes('পোশাক'));
+      return found ? getCatName(found) : '👕 পোশাক';
+    }
+    if (/বই|শিক্ষা|পড়াশোনা|টিউশন|টিউটর|কোর্স|খাতা|কলম|স্কুল|কলেজ|ফি/i.test(prompt)) {
+      const found = findExisting('শিক্ষা') || categoryList.find((c) => getCatName(c).includes('শিক্ষা') || getCatName(c).includes('বই'));
+      return found ? getCatName(found) : '🎓 শিক্ষা';
+    }
+    if (/উপহার|গিফট/i.test(prompt)) {
+      const found = findExisting('উপহার') || categoryList.find((c) => getCatName(c).includes('উপহার'));
+      return found ? getCatName(found) : '🎁 উপহার';
+    }
+    if (/জিম|ফিটনেস|কসরত|ব্যায়াম/i.test(prompt)) {
+      const found = findExisting('জিম') || categoryList.find((c) => getCatName(c).includes('জিম'));
+      return found ? getCatName(found) : '🏋️ জিম';
+    }
+    if (/মেস|বাসা ভাড়া|ফ্ল্যাট|ভাড়া/i.test(prompt)) {
+      const found = findExisting('বাসা') || categoryList.find((c) => getCatName(c).includes('ভাড়া') || getCatName(c).includes('বাসা') || getCatName(c).includes('মেস'));
+      return found ? getCatName(found) : '🏠 মেস ভাড়া';
+    }
+    if (/বিনোদন|মুভি|সিনেমা|গেম|ট্যুর|পিকনিক|পার্ক/i.test(prompt)) {
+      const found = findExisting('বিনোদন') || categoryList.find((c) => getCatName(c).includes('বিনোদন'));
+      return found ? getCatName(found) : '🎉 বিনোদন';
+    }
+
+    // 3. Dynamic subject extraction for custom expenses - MUST check categoryList first!
+    const matchSubject = prompt.match(/([অ-য়a-zA-Z]+)(ে|িতে|\s+এ|\s+খরচ|\s+করলাম|\s+দিলাম|\s+ব্যয়|\s+ব্যায়)/i);
+    if (matchSubject && matchSubject[1] && matchSubject[1].length >= 2) {
+      const subject = matchSubject[1].trim();
+      if (!/টাকা|আজকে|কালকে|বিকাশ|নগদ|ক্যাশ|ব্যাংক|খরচ/i.test(subject)) {
+        const existingSubjectCat = findExisting(subject);
+        if (existingSubjectCat) {
+          return getCatName(existingSubjectCat);
+        }
+        return `🏷️ ${subject}`;
+      }
+    }
+
+    const foundOtherExp = categoryList.find((c) => getCatName(c).includes('অন্যান্য'));
+    return foundOtherExp ? getCatName(foundOtherExp) : '🏷️ অন্যান্য';
+  } else {
+    // Income
+    if (/দোকান|ব্যবসা|সেল|বিক্রি|কাস্টমার|দোকানে|দোকানের/i.test(prompt)) {
+      const found = findExisting('ব্যবসা') || categoryList.find((c) => getCatName(c).includes('ব্যবসা') || getCatName(c).includes('দোকান'));
+      return found ? getCatName(found) : '🏪 ব্যবসা';
+    }
+    if (/বেতন|স্যালারি/i.test(prompt)) {
+      const found = findExisting('বেতন') || categoryList.find((c) => getCatName(c).includes('বেতন'));
+      return found ? getCatName(found) : '💼 বেতন';
+    }
+    if (/উপহার|গিফট|বক্শিস/i.test(prompt)) {
+      const found = findExisting('উপহার') || categoryList.find((c) => getCatName(c).includes('উপহার'));
+      return found ? getCatName(found) : '🎁 উপহার';
+    }
+    if (/ফ্রিল্যান্সিং|কাজ|প্রজেক্ট/i.test(prompt)) {
+      const found = findExisting('ফ্রিল্যান্সিং') || categoryList.find((c) => getCatName(c).includes('ফ্রিল্যান্সিং'));
+      return found ? getCatName(found) : '💻 ফ্রিল্যান্সিং';
+    }
+    if (/বোনাস|ইনসেন্টিভ/i.test(prompt)) {
+      const found = findExisting('বোনাস') || categoryList.find((c) => getCatName(c).includes('বোনাস'));
+      return found ? getCatName(found) : '🎁 বোনাস';
+    }
+
+    const foundOtherInc = categoryList.find((c) => getCatName(c).includes('অন্যান্য'));
+    return foundOtherInc ? getCatName(foundOtherInc) : '💰 অন্যান্য আয়';
+  }
+}
+
+// Smart Local Bengali Parser (Super-Fast, Instant 0-Lag)
 export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
   const rawPrompt = ctx.prompt || '';
   const promptEnDigits = convertBnToEnDigits(rawPrompt);
 
-  // Extract all numbers from input
-  const numMatches = promptEnDigits.match(/\b\d+(\.\d+)?\b/g);
-  const extractedAmount = numMatches && numMatches.length > 0 ? parseFloat(numMatches[0]) : undefined;
+  // Intelligent extraction of amount:
+  let extractedAmount: number | undefined = undefined;
+  const takaMatch = promptEnDigits.match(/(\d+(\.\d+)?)\s*(টাকা|টাকায়|tk|taka|\/-)/i);
 
-  // Determine Payment Method
-  let paymentMethod = 'Bkash'; // Default to Bkash if mentioned or default
-  if (/ক্যাশ|পকেট|cash|pocket/i.test(rawPrompt)) paymentMethod = 'Cash';
-  else if (/নগদ|nagad/i.test(rawPrompt)) paymentMethod = 'Nagad';
-  else if (/রকেট|rocket/i.test(rawPrompt)) paymentMethod = 'Rocket';
-  else if (/ব্যাংক|bank|ibbplc/i.test(rawPrompt)) paymentMethod = 'Bank';
-  else if (/বিকাশ|bkash/i.test(rawPrompt)) paymentMethod = 'Bkash';
+  if (takaMatch && takaMatch[1]) {
+    extractedAmount = parseFloat(takaMatch[1]);
+  } else {
+    const cleanedText = promptEnDigits.replace(/\(\d+\)/g, '');
+    const numMatches = cleanedText.match(/\b\d+(\.\d+)?\b/g);
+    if (numMatches && numMatches.length > 0) {
+      extractedAmount = parseFloat(numMatches[0]);
+    }
+  }
 
-  // A. Check for Casual Greeting / Conversation
-  if (/কেমন আছ|কেমন আছেন|কেমন আছো|কেমন আছিস|হাই|হ্যালো|কথা বল|কথা বলো|শোনো|কে তুমি/i.test(rawPrompt) && !extractedAmount) {
-    let reply = 'আমি আলহামদুলিল্লাহ ভালো আছি, বন্ধু! 🤖\nআপনার আজকের হিসাব বা কোনো প্রশ্ন থাকলে বলতে পারেন, আমি নোট করে নেব!';
+  // Determine Payment Method intelligently
+  let paymentMethod = 'Cash';
+  let wasDefaultMethod = false;
+
+  if (/বিকাশ|bkash/i.test(rawPrompt)) {
+    paymentMethod = 'Bkash';
+  } else if (/নগদ|nagad/i.test(rawPrompt)) {
+    paymentMethod = 'Nagad';
+  } else if (/রকেট|rocket/i.test(rawPrompt)) {
+    paymentMethod = 'Rocket';
+  } else if (/ব্যাংক|bank|ibbplc|কার্ড/i.test(rawPrompt)) {
+    paymentMethod = 'Bank';
+  } else if (/ক্যাশ|পকেট|cash|pocket|হাত/i.test(rawPrompt)) {
+    paymentMethod = 'Cash';
+  } else {
+    if (/মোবাইল|এমবি|রিচার্জ|ফ্লেক্সি|জিবি/i.test(rawPrompt)) {
+      paymentMethod = 'Bkash';
+      wasDefaultMethod = true;
+    } else {
+      paymentMethod = 'Cash';
+      wasDefaultMethod = true;
+    }
+  }
+
+  // A. Check for CORRECTION / SELF-REVISION Requests
+  if (/বিকাশ না|ক্যাশ না|নগদ না|ভুল হয়েছে|ভুল হইছে|ভুল|সংশোধন|ক্যাশ ছিল|বিকাশ ছিল|নগদ ছিল|বদলে দাও|ভুল হিসাব/i.test(rawPrompt)) {
+    let targetMethod = 'Cash';
+    if (/বিকাশ ছিল|বিকাশে|বিকাশ ধরো/i.test(rawPrompt)) targetMethod = 'Bkash';
+    else if (/নগদ ছিল|নগদে|নগদ ধরো/i.test(rawPrompt)) targetMethod = 'Nagad';
+    else if (/ক্যাশ ছিল|ক্যাশে|ক্যাশ ধরো/i.test(rawPrompt)) targetMethod = 'Cash';
+    else if (/ব্যাংক ছিল|ব্যাংকে/i.test(rawPrompt)) targetMethod = 'Bank';
+
+    const lastTx = ctx.transactions && ctx.transactions.length > 0 ? ctx.transactions[0] : null;
+
+    if (lastTx) {
+      const updatedTx = {
+        ...lastTx,
+        paymentMethod: targetMethod,
+        amount: extractedAmount || lastTx.amount,
+      };
+
+      const aiReplyMessage = computeWalletBreakdown(ctx, {
+        intent: 'CORRECTION',
+        category: lastTx.category || 'সংশোধিত খরচ',
+        amount: updatedTx.amount,
+        paymentMethod: targetMethod,
+        note: lastTx.note || 'সংশোধিত লেনদেন',
+        correctionNote: `বিকাশ/অন্যান্য মাধ্যমের বদলে **${targetMethod === 'Cash' ? 'ক্যাশ (পকেট)' : targetMethod}** মাধ্যমে আপডেট করে দেওয়া হয়েছে!`,
+      });
+
+      return {
+        intent: 'CORRECTION',
+        extractedData: {
+          amount: updatedTx.amount,
+          category: lastTx.category,
+          paymentMethod: targetMethod,
+        },
+        aiReplyMessage,
+        structuredAction: {
+          type: 'UPDATE_TRANSACTION',
+          payload: updatedTx,
+        },
+      };
+    }
+  }
+
+  // B. Check for Summary / Overall Financial Status Request
+  if (/সামারি|রিপোর্ট|বর্তমান আর্থিক|সার্বিক|অবস্থা কেমন|হিসাব দাও|পোর্টফোলিও|ব্যালেন্স কত|মোট কত আয় ব্যয় হলো|মোট আয় ব্যয়/i.test(rawPrompt) || (!extractedAmount && /হিসাব|ব্যালেন্স|সামারি/i.test(rawPrompt))) {
+    const aiReplyMessage = computeWalletBreakdown(ctx, { intent: 'SUMMARY' });
+    return {
+      intent: 'SUMMARY',
+      aiReplyMessage,
+    };
+  }
+
+  // C. Check for Casual Greeting / Conversation
+  if (/কেমন আছ|কেমন আছেন|কেমন আছো|হাই|হ্যালো|কথা বল|কথা বলো|শোনো|কে তুমি/i.test(rawPrompt) && !extractedAmount) {
+    let reply = 'আমি আলহামদুলিল্লাহ ভালো আছি, বন্ধু! 🤖\nআপনার আজকের হিসাব বা কোনো প্রশ্ন থাকলে বলতে পারেন, আমি সঙ্গে সঙ্গে সব খাতা ও ফায়ারস্টোর ডাটাবেজে আপডেট করে দেব!';
     if (/কথা বল|কথা বলো/i.test(rawPrompt)) {
-      reply = 'হ্যাঁ বন্ধু! 🫡 আমি আপনার এআই মানি ম্যানেজার।\nআজকে কত টাকা খরচ বা আয় করেছেন বলুন, আমি সঙ্গে সঙ্গে খাতা আপডেট করে দিচ্ছি!';
+      reply = 'হ্যাঁ বন্ধু! 🫡 আমি আপনার স্বাধীন এআই মানি ম্যানেজার।\nআজকে বাজারে বা কোথায় কত টাকা খরচ কিংবা আয় হয়েছে বলুন, আমি ক্যাটাগরি খুঁজে বের করে সরাসরি আপনার ব্যালেন্স ও সাম্প্রতিক হিসাব আপডেট করে দিচ্ছি!';
     }
     return {
       intent: 'GREETING',
@@ -339,10 +543,10 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // B. Check for PAWNA (Lent Money)
+  // D. Check for PAWNA (Lent Money)
   if (/ধার দিলাম|ধারে দিলাম|ধার দিয়েছি|পাবো|পাওনা/i.test(rawPrompt) && extractedAmount) {
     const nameMatch = rawPrompt.match(/([অ-য়a-zA-Z]+)(কে|রে|\s+কে|\s+রে)/i);
-    const personName = nameMatch ? nameMatch[1] : 'সো হেল/পরিচিত';
+    const personName = nameMatch ? nameMatch[1] : 'পরিচিত';
 
     const aiReplyMessage = computeWalletBreakdown(ctx, {
       intent: 'PAWNA',
@@ -357,7 +561,6 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
         amount: extractedAmount,
         personName,
         note: rawPrompt,
-        date: new Date().toISOString().split('T')[0],
       },
       aiReplyMessage,
       structuredAction: {
@@ -374,10 +577,10 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // C. Check for DENA (Borrowed Money)
-  if (/ধার নিলাম|ধার নিয়েছি|ঋণ নিলাম|দেনা/i.test(rawPrompt) && extractedAmount) {
-    const nameMatch = rawPrompt.match(/([অ-য়a-zA-Z]+)(কাছ|র কাছ|\s+থেকে)/i);
-    const personName = nameMatch ? nameMatch[1] : 'বাবা/পরিচিত';
+  // E. Check for DENA (Borrowed Money)
+  if (/ধার নিলাম|ধার নিয়েছি|ধার পেলাম|দেনা|ঋণ/i.test(rawPrompt) && extractedAmount) {
+    const nameMatch = rawPrompt.match(/([অ-য়a-zA-Z]+)(কাছ থেকে|র কাছ থেকে|থেকে|র থেকে)/i);
+    const personName = nameMatch ? nameMatch[1] : 'পরিচিত';
 
     const aiReplyMessage = computeWalletBreakdown(ctx, {
       intent: 'DENA',
@@ -392,7 +595,6 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
         amount: extractedAmount,
         personName,
         note: rawPrompt,
-        date: new Date().toISOString().split('T')[0],
       },
       aiReplyMessage,
       structuredAction: {
@@ -409,12 +611,9 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // D. Check for INCOME
-  if (/আয়|বেতন|বোনাস|উপহার পেলাম|জমা হলো|পেলুম|ইনকাম|আয় হয়েছে/i.test(rawPrompt) && extractedAmount) {
-    let category = 'অন্যান্য আয়';
-    if (/বেতন/i.test(rawPrompt)) category = 'বেতন';
-    else if (/বোনাস/i.test(rawPrompt)) category = 'বোনাস';
-    else if (/ব্যবসা/i.test(rawPrompt)) category = 'ব্যবসা';
+  // F. Check for INCOME
+  if (/আয়|বেতন|বোনাস|উপহার পেলাম|জমা হলো|ইনকাম|আয় হয়েছে|পেলাম/i.test(rawPrompt) && extractedAmount) {
+    const category = matchCategoryFromList(rawPrompt, ctx.categories?.income, 'income');
 
     const aiReplyMessage = computeWalletBreakdown(ctx, {
       intent: 'INCOME',
@@ -422,6 +621,7 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
       amount: extractedAmount,
       paymentMethod,
       note: rawPrompt,
+      wasDefaultMethod,
     });
 
     return {
@@ -448,19 +648,10 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // E. Check for EXPENSE (default if amount is present or keywords matched)
-  if (extractedAmount || /খরচ|কিনলাম|কিনছি|দিলাম|খেলাম|ভাড়া|বিল|বাজার|রিকশা|মোবাইল|এমবি/i.test(rawPrompt)) {
-    const amt = extractedAmount || 272;
-
-    // Detect Expense Category
-    let category = '📱 মোবাইল খরচ';
-    if (/মোবাইল|এমবি|রিচার্জ|ফ্লেক্সি/i.test(rawPrompt)) category = '📱 মোবাইল খরচ';
-    else if (/রিকশা|বাস|ভাড়া|যাতায়াত|গাড়ি/i.test(rawPrompt)) category = '🚌 যানবাহন';
-    else if (/চা|নাস্তা|খাবার|খাইলাম|খেলাম|বিরিয়ানি|হোটেল/i.test(rawPrompt)) category = '🍔 খাদ্য';
-    else if (/বিল|কারেন্ট|বিদ্যুৎ|গ্যাস|পানি/i.test(rawPrompt)) category = '⚡ বিল';
-    else if (/চিকিৎসা|ওষুধ|ডাক্তার/i.test(rawPrompt)) category = '💊 চিকিৎসা';
-    else if (/পোশাক|কাপড়|জামা/i.test(rawPrompt)) category = '👕 পোশাক';
-    else if (/বাজার|শাক|সবজি|মাছ/i.test(rawPrompt)) category = '🛒 বাজার';
+  // G. Check for EXPENSE
+  if (extractedAmount || /খরচ|কিনলাম|কিনছি|দিলাম|খেলাম|ভাড়া|বিল|বাজার|রিকশা|গাড়ি|দান|এমবি|নাস্তা|চা/i.test(rawPrompt)) {
+    const amt = extractedAmount || 100;
+    const category = matchCategoryFromList(rawPrompt, ctx.categories?.expense, 'expense');
 
     const aiReplyMessage = computeWalletBreakdown(ctx, {
       intent: 'EXPENSE',
@@ -468,6 +659,7 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
       amount: amt,
       paymentMethod,
       note: rawPrompt,
+      wasDefaultMethod,
     });
 
     return {
@@ -494,78 +686,14 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // F. Check for Summary / Query / Analysis
-  if (/রিপোর্ট|সামারি|কত খরচ|কোথায় খরচ|জমা খরচ|ব্যালেন্স|হিসাব|সামারি দাও/i.test(rawPrompt)) {
-    const aiReplyMessage = computeWalletBreakdown(ctx, {
-      intent: 'SUMMARY',
-    });
-    return {
-      intent: 'SUMMARY',
-      aiReplyMessage,
-    };
-  }
-
-  // Fallback polite general response
+  // Fallback
   return {
     intent: 'GENERAL',
-    aiReplyMessage: `আপনার বার্তা পেয়েছি! 😊\n\nযেমন: "আজকে বিকাশ থেকে আমার মোবাইল এর জন্য এমবি কিনছে 272 টাকা" অথবা "আজকে ৫০০০ টাকা আয় হয়েছে" বললে আমি সরাসরি সেভ করে এমন সুন্দর সামারি রিপোর্ট দিয়ে দেব!`,
+    aiReplyMessage: computeWalletBreakdown(ctx, { intent: 'SUMMARY' }),
   };
 }
 
-// 2. Main Entry point for AI parsing with multi-tier fallback
+// Main Entry Point: Synchronous & Instant to prevent ANY lag or delays!
 export async function parseTransactionWithAI(ctx: AIParseContext): Promise<AIParseResult> {
-  // Tier 1: Try Server Endpoint (/api/ai/parse-transaction)
-  try {
-    const response = await fetch('/api/ai/parse-transaction', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(ctx),
-    });
-
-    if (response.ok) {
-      const data = await response.json();
-      if (data && data.aiReplyMessage && !data.error) {
-        return data;
-      }
-    }
-  } catch (err) {
-    console.warn('Server API call failed or unavailable, trying client-side fallback:', err);
-  }
-
-  // Tier 2: Try Client-side Gemini API if key is present
-  const clientApiKey =
-    (typeof process !== 'undefined' && process.env?.GEMINI_API_KEY) ||
-    (import.meta as any).env?.VITE_GEMINI_API_KEY;
-
-  if (clientApiKey) {
-    try {
-      const ai = new GoogleGenAI({ apiKey: clientApiKey });
-      const response = await ai.models.generateContent({
-        model: 'gemini-3.6-flash',
-        contents: ctx.prompt,
-        config: {
-          systemInstruction: 'You are AI Money Manager Pro. Extract financial details or respond politely in Bengali matching exact emoji breakdown structure.',
-          responseMimeType: 'application/json',
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              intent: { type: Type.STRING },
-              aiReplyMessage: { type: Type.STRING },
-            },
-            required: ['intent', 'aiReplyMessage'],
-          },
-        },
-      });
-
-      const parsed = JSON.parse(response.text || '{}');
-      if (parsed.aiReplyMessage) {
-        return parsed;
-      }
-    } catch (clientErr) {
-      console.warn('Client Gemini call failed, using local smart parser:', clientErr);
-    }
-  }
-
-  // Tier 3: Local Smart Bengali Financial Parser (guaranteed to succeed 100%)
   return smartLocalBengaliParser(ctx);
 }

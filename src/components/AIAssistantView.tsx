@@ -26,6 +26,7 @@ export const AIAssistantView: React.FC = () => {
     incomeCategories,
     expenseCategories,
     addTransaction,
+    editTransaction,
     addDebt,
     transactions,
     debts,
@@ -154,8 +155,8 @@ export const AIAssistantView: React.FC = () => {
         const parseResult = await parseTransactionWithAI({
           prompt: text,
           categories: {
-            income: incomeCategories.map((c) => c.nameBn),
-            expense: expenseCategories.map((c) => c.nameBn),
+            income: incomeCategories,
+            expense: expenseCategories,
           },
           transactions,
           debts,
@@ -170,6 +171,11 @@ export const AIAssistantView: React.FC = () => {
             await addTransaction(parseResult.structuredAction.payload);
           } else if (parseResult.structuredAction.type === 'ADD_DEBT') {
             await addDebt(parseResult.structuredAction.payload);
+          } else if (parseResult.structuredAction.type === 'UPDATE_TRANSACTION') {
+            const { id, ...updatedFields } = parseResult.structuredAction.payload;
+            if (id) {
+              await editTransaction(id, updatedFields);
+            }
           }
         }
 

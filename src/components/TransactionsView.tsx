@@ -190,69 +190,72 @@ export const TransactionsView: React.FC<TransactionsViewProps> = ({
             <p className="opacity-70 text-sm">কোন লেনদেন পাওয়া যায়নি।</p>
           </div>
         ) : (
-          filteredTransactions.map((tx) => (
-            <div
-              key={tx.id}
-              className={`flex items-center justify-between p-3.5 rounded-2xl ${currentTheme.cardBgClass} ${currentTheme.cardHoverClass} transition-all text-xs sm:text-sm`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`p-2.5 rounded-xl ${
-                    tx.type === 'income'
-                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                      : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                  }`}
-                >
-                  {tx.type === 'income' ? (
-                    <ArrowUpRight className="w-5 h-5" />
-                  ) : (
-                    <ArrowDownRight className="w-5 h-5" />
-                  )}
-                </div>
-
-                <div>
-                  <div className="flex items-center gap-2">
-                    <h4 className="font-bold">{tx.category}</h4>
-                    <span className={`text-[10px] px-2 py-0.5 rounded-full ${currentTheme.badgeClass}`}>
-                      {tx.paymentMethod}
-                    </span>
-                  </div>
-                  <p className="text-xs opacity-70 mt-0.5">{tx.note || 'কোন বর্ণনা নেই'}</p>
-                </div>
-              </div>
-
-              <div className="flex items-center gap-4">
-                {tx.receiptImage && (
-                  <button
-                    onClick={() => setSelectedReceipt(tx.receiptImage!)}
-                    className="p-1.5 bg-slate-800/40 rounded-lg opacity-80 hover:opacity-100"
-                    title="রসিদ মেমো দেখুন"
-                  >
-                    <Image className="w-4 h-4" />
-                  </button>
-                )}
-
-                <div className="text-right">
-                  <span
-                    className={`font-black text-sm block ${
-                      tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
+          filteredTransactions.map((tx) => {
+            const isInc = isIncomeType(tx.type);
+            return (
+              <div
+                key={tx.id}
+                className={`flex items-center justify-between p-3.5 rounded-2xl ${currentTheme.cardBgClass} ${currentTheme.cardHoverClass} transition-all text-xs sm:text-sm`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2.5 rounded-xl ${
+                      isInc
+                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
                     }`}
                   >
-                    {tx.type === 'income' ? '+' : '-'}৳{tx.amount.toLocaleString()}
-                  </span>
-                  <span className="text-[10px] opacity-60">{tx.date}</span>
+                    {isInc ? (
+                      <ArrowUpRight className="w-5 h-5" />
+                    ) : (
+                      <ArrowDownRight className="w-5 h-5" />
+                    )}
+                  </div>
+
+                  <div>
+                    <div className="flex items-center gap-2">
+                      <h4 className="font-bold">{tx.category}</h4>
+                      <span className={`text-[10px] px-2 py-0.5 rounded-full ${currentTheme.badgeClass}`}>
+                        {tx.paymentMethod}
+                      </span>
+                    </div>
+                    <p className="text-xs opacity-70 mt-0.5">{tx.note || 'কোন বর্ণনা নেই'}</p>
+                  </div>
                 </div>
 
-                <button
-                  onClick={() => deleteTransaction(tx.id)}
-                  className="p-1.5 opacity-50 hover:opacity-100 text-rose-500 transition-opacity"
-                  title="ডিলিট করুন"
-                >
-                  <Trash2 className="w-4 h-4" />
-                </button>
+                <div className="flex items-center gap-4">
+                  {tx.receiptImage && (
+                    <button
+                      onClick={() => setSelectedReceipt(tx.receiptImage!)}
+                      className="p-1.5 bg-slate-800/40 rounded-lg opacity-80 hover:opacity-100"
+                      title="রসিদ মেমো দেখুন"
+                    >
+                      <Image className="w-4 h-4" />
+                    </button>
+                  )}
+
+                  <div className="text-right">
+                    <span
+                      className={`font-black text-sm block ${
+                        isInc ? 'text-emerald-500' : 'text-rose-500'
+                      }`}
+                    >
+                      {isInc ? '+' : '-'}৳{tx.amount.toLocaleString()}
+                    </span>
+                    <span className="text-[10px] opacity-60">{tx.date}</span>
+                  </div>
+
+                  <button
+                    onClick={() => deleteTransaction(tx.id)}
+                    className="p-1.5 opacity-50 hover:opacity-100 text-rose-500 transition-opacity"
+                    title="ডিলিট করুন"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))
+            );
+          })
         )}
       </div>
 

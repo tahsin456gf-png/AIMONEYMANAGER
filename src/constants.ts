@@ -1,12 +1,32 @@
 import { Category, Transaction, DebtItem, Budget, SavingsGoal, AccountMethod } from './types';
 
 export const DEFAULT_PAYMENT_METHODS: AccountMethod[] = [
-  { id: 'pm_cash', name: 'Cash', nameBn: '💵 ক্যাশ / পকেট', isHidden: false },
-  { id: 'pm_bkash', name: 'Bkash', nameBn: '📱 বিকাশ (bKash)', isHidden: false },
-  { id: 'pm_nagad', name: 'Nagad', nameBn: '📱 নগদ (Nagad)', isHidden: false },
-  { id: 'pm_bank', name: 'Bank', nameBn: '🏦 ব্যাংক (Bank)', isHidden: false },
-  { id: 'pm_card', name: 'Card', nameBn: '💳 কার্ড (Card)', isHidden: false },
-  { id: 'pm_other', name: 'Other', nameBn: '🌐 অন্যান্য', isHidden: false },
+  // Cash (নগদ)
+  { id: 'pm_cash_wallet', name: 'মানিব্যাগ', nameBn: 'মানিব্যাগ', category: 'cash', initialBalance: 945, isHidden: false },
+  { id: 'pm_cash_new_notes', name: 'নতুন নোট সংগ্রহ', nameBn: 'নতুন নোট সংগ্রহ', category: 'cash', initialBalance: 392, isHidden: false },
+  
+  // Bank / Debit Card (ডেবিট কার্ড / ব্যাংক)
+  { id: 'pm_bank_ibbplc', name: 'IBBPLC', nameBn: 'IBBPLC', category: 'bank', initialBalance: 4186.65, isHidden: false },
+  { id: 'pm_card', name: 'Card', nameBn: '💳 কার্ড (Card)', category: 'bank', initialBalance: 0, isHidden: false },
+
+  // Virtual Accounts (ভার্চুয়াল অ্যাকাউন্ট)
+  { id: 'pm_v_islamic', name: 'ISLAMIC WALLET', nameBn: 'ISLAMIC WALLET', category: 'virtual', initialBalance: 20, isHidden: false },
+  { id: 'pm_v_upay', name: 'UPAY', nameBn: 'UPAY', category: 'virtual', initialBalance: 29, isHidden: false },
+  { id: 'pm_v_tap', name: 'Tap', nameBn: 'Tap', category: 'virtual', initialBalance: 5, isHidden: false },
+  { id: 'pm_bkash', name: 'Bkash', nameBn: '📱 বিকাশ (bKash)', category: 'virtual', initialBalance: 0, isHidden: false },
+  { id: 'pm_nagad', name: 'Nagad', nameBn: '📱 নগদ (Nagad)', category: 'virtual', initialBalance: 0, isHidden: false },
+  { id: 'pm_v_rocket', name: 'Rocket', nameBn: 'Rocket', category: 'virtual', initialBalance: 0, isHidden: false },
+
+  // Receivables (আমাকে ঋণী - Pawna)
+  { id: 'pm_rec_hosain', name: 'হোসাইন', nameBn: 'হোসাইন', category: 'receivable', initialBalance: 0, isHidden: false },
+  { id: 'pm_rec_ammu', name: 'আম্মু', nameBn: 'আম্মু', category: 'receivable', initialBalance: 720, isHidden: false },
+  { id: 'pm_rec_sir', name: 'স্যার', nameBn: 'স্যার', category: 'receivable', initialBalance: 350, isHidden: false },
+  { id: 'pm_rec_obaidullah', name: 'ওবায়দুল্লাহ', nameBn: 'ওবায়দুল্লাহ', category: 'receivable', initialBalance: 3600, isHidden: false },
+  { id: 'pm_rec_jahidul', name: 'জাহিদুল', nameBn: 'জাহিদুল', category: 'receivable', initialBalance: 200, isHidden: false },
+  { id: 'pm_rec_basit', name: 'বাসিত', nameBn: 'বাসিত', category: 'receivable', initialBalance: 60, isHidden: false },
+
+  // Investments (বিনিয়োগ)
+  { id: 'pm_inv_dps', name: 'DPS', nameBn: 'DPS', category: 'investment', initialBalance: 2000, isHidden: false },
 ];
 
 export const DEFAULT_INCOME_CATEGORIES: Category[] = [
@@ -35,124 +55,10 @@ export const DEFAULT_EXPENSE_CATEGORIES: Category[] = [
   { id: 'exp_other', name: 'Other Expense', nameBn: 'অন্যান্য', type: 'expense', icon: 'MoreHorizontal', color: '#9CA3AF' },
 ];
 
-export const INITIAL_TRANSACTIONS: Transaction[] = [
-  {
-    id: 'tx_inc_1',
-    type: 'income',
-    amount: 32000,
-    category: 'Freelancing (ফ্রিল্যান্সিং)',
-    date: new Date().toISOString().split('T')[0],
-    note: 'ওয়েব ডিজাইন প্রজেক্ট',
-    paymentMethod: 'Bank',
-    createdAt: Date.now() - 86400000 * 2,
-  },
-  {
-    id: 'tx_inc_2',
-    type: 'income',
-    amount: 45000,
-    category: 'Salary (বেতন)',
-    date: new Date().toISOString().split('T')[0],
-    note: 'মাসিক বেতন জমা',
-    paymentMethod: 'Bank',
-    createdAt: Date.now() - 86400000 * 10,
-  },
-  {
-    id: 'tx_exp_1',
-    type: 'expense',
-    amount: 8980,
-    category: '🍔 খাদ্য',
-    date: new Date().toISOString().split('T')[0],
-    note: 'মাসিক খাদ্য রেস্তোরাঁ ও খাদ্যসামগ্রী',
-    paymentMethod: 'Bkash',
-    createdAt: Date.now() - 3600000 * 5,
-  },
-  {
-    id: 'tx_exp_2',
-    type: 'expense',
-    amount: 120,
-    category: '🚌 যানবাহন',
-    date: new Date().toISOString().split('T')[0],
-    note: 'বাস ও রিকশা ভাড়া',
-    paymentMethod: 'Cash',
-    createdAt: Date.now() - 3600000 * 3,
-  },
-  {
-    id: 'tx_exp_3',
-    type: 'expense',
-    amount: 15000,
-    category: '🏠 বাসা',
-    date: new Date().toISOString().split('T')[0],
-    note: 'বাসা ভাড়া পরিশোধ',
-    paymentMethod: 'Bank',
-    createdAt: Date.now() - 86400000,
-  },
-  {
-    id: 'tx_exp_4',
-    type: 'expense',
-    amount: 3200,
-    category: '⚡ বিল',
-    date: new Date().toISOString().split('T')[0],
-    note: 'বিদ্যুৎ ও গ্যাস বিল',
-    paymentMethod: 'Bkash',
-    createdAt: Date.now() - 86400000 * 2,
-  },
-];
+export const INITIAL_TRANSACTIONS: Transaction[] = [];
 
-export const INITIAL_DEBTS: DebtItem[] = [
-  {
-    id: 'debt_1',
-    type: 'pawna',
-    personName: 'সোহেল',
-    amount: 2000,
-    paidAmount: 0,
-    dueDate: new Date(Date.now() + 86400000 * 7).toISOString().split('T')[0],
-    date: new Date().toISOString().split('T')[0],
-    notes: 'জরুরী প্রয়োজনে ধার দেওয়া হয়েছে',
-    status: 'pending',
-    createdAt: Date.now() - 86400000,
-  },
-  {
-    id: 'debt_2',
-    type: 'dena',
-    personName: 'বাবা',
-    amount: 5000,
-    paidAmount: 1000,
-    dueDate: new Date(Date.now() + 86400000 * 15).toISOString().split('T')[0],
-    date: new Date().toISOString().split('T')[0],
-    notes: 'অনলাইন শপিংয়ের জন্য নেয়া ধার',
-    status: 'partial',
-    createdAt: Date.now() - 86400000 * 2,
-  }
-];
+export const INITIAL_DEBTS: DebtItem[] = [];
 
-export const INITIAL_BUDGETS: Budget[] = [
-  { id: 'b_food', categoryId: '🍔 খাদ্য', monthlyTarget: 500, alertThresholdPercent: 80 },
-  { id: 'b_transport', categoryId: '🚌 যানবাহন', monthlyTarget: 3000, alertThresholdPercent: 80 },
-  { id: 'b_rent', categoryId: '🏠 বাসা', monthlyTarget: 15000, alertThresholdPercent: 80 },
-  { id: 'b_bills', categoryId: '⚡ বিল', monthlyTarget: 4000, alertThresholdPercent: 80 },
-  { id: 'b_market', categoryId: '🛒 বাজার', monthlyTarget: 8000, alertThresholdPercent: 80 },
-  { id: 'b_entertainment', categoryId: '🎮 বিনোদন', monthlyTarget: 2500, alertThresholdPercent: 80 },
-];
+export const INITIAL_BUDGETS: Budget[] = [];
 
-export const INITIAL_SAVINGS_GOALS: SavingsGoal[] = [
-  {
-    id: 'sg_1',
-    title: 'নতুন ল্যাপটপ ফান্ড',
-    targetAmount: 85000,
-    currentAmount: 32000,
-    targetDate: '2026-12-31',
-    color: '#3B82F6',
-    icon: 'Laptop',
-    createdAt: Date.now(),
-  },
-  {
-    id: 'sg_2',
-    title: 'জরুরি তহবিল (Emergency Fund)',
-    targetAmount: 50000,
-    currentAmount: 25000,
-    targetDate: '2026-10-15',
-    color: '#10B981',
-    icon: 'ShieldCheck',
-    createdAt: Date.now(),
-  }
-];
+export const INITIAL_SAVINGS_GOALS: SavingsGoal[] = [];

@@ -14,10 +14,12 @@ import {
   Globe,
   KeyRound,
   CheckCircle2,
+  LogOut,
+  UserCheck,
 } from 'lucide-react';
 
 export const ProfileView: React.FC = () => {
-  const { userProfile, updateUserProfile, exportDatabaseJSON, importDatabaseJSON, currentTheme } = useMoney();
+  const { userProfile, updateUserProfile, exportDatabaseJSON, importDatabaseJSON, currentTheme, currentUser, logoutUser, switchDemoAccount } = useMoney();
 
   const [pin, setPin] = useState(userProfile.pinCode);
 
@@ -40,21 +42,31 @@ export const ProfileView: React.FC = () => {
   return (
     <div className="space-y-6 pb-24">
       {/* Header Profile Card */}
-      <div className={`${currentTheme.cardBgClass} p-6 rounded-3xl flex items-center gap-4 shadow-sm`}>
-        <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 p-[2px]">
-          <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center font-black text-2xl text-emerald-400">
-            {userProfile.name.charAt(0)}
+      <div className={`${currentTheme.cardBgClass} p-6 rounded-3xl flex items-center justify-between shadow-sm`}>
+        <div className="flex items-center gap-4">
+          <div className="w-16 h-16 rounded-2xl bg-gradient-to-tr from-emerald-500 to-indigo-600 p-[2px]">
+            <div className="w-full h-full bg-slate-950 rounded-[14px] flex items-center justify-center font-black text-2xl text-emerald-400">
+              {userProfile.name ? userProfile.name.charAt(0) : 'U'}
+            </div>
+          </div>
+          <div>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white">{currentUser?.name || userProfile.name}</h2>
+              <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
+                VERIFIED USER
+              </span>
+            </div>
+            <p className="text-xs text-slate-400 mt-0.5">📱 {currentUser?.phone || userProfile.phone}</p>
           </div>
         </div>
-        <div>
-          <div className="flex items-center gap-2">
-            <h2 className="text-xl font-bold text-white">{userProfile.name}</h2>
-            <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded bg-emerald-500/20 text-emerald-400 border border-emerald-500/30">
-              PRO USER
-            </span>
-          </div>
-          <p className="text-xs text-slate-400 mt-0.5">{userProfile.email}</p>
-        </div>
+
+        <button
+          onClick={() => logoutUser()}
+          className="px-4 py-2 bg-red-500/10 hover:bg-red-500/20 border border-red-500/20 text-red-400 rounded-2xl text-xs font-bold flex items-center gap-1.5 transition-all"
+        >
+          <LogOut className="w-4 h-4" />
+          <span>লগআউট</span>
+        </button>
       </div>
 
       {/* Settings Options Grid */}

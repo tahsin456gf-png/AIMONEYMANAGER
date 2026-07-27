@@ -39,8 +39,31 @@ import {
 } from 'recharts';
 import { motion } from 'motion/react';
 
+const getBengaliDayName = (dateStr: string): string => {
+  if (!dateStr) return '';
+  const parts = dateStr.split('-');
+  if (parts.length === 3) {
+    const year = parseInt(parts[0], 10);
+    const month = parseInt(parts[1], 10) - 1;
+    const day = parseInt(parts[2], 10);
+    const d = new Date(year, month, day);
+    const daysBn = ['রবিবার', 'সোমবার', 'মঙ্গলবার', 'বুধবার', 'বৃহস্পতিবার', 'শুক্রবার', 'শনিবার'];
+    return daysBn[d.getDay()] || '';
+  }
+  return '';
+};
+
+const getFormattedTxTime = (tx: { time?: string; createdAt?: number }): string => {
+  if (tx.time) return tx.time;
+  if (tx.createdAt) {
+    const d = new Date(tx.createdAt);
+    return d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+  }
+  return '12:00 PM';
+};
+
 export const LiveReportSystem: React.FC = () => {
-  const { transactions, budgets, expenseCategories, incomeCategories, currentTheme, adminSettings } = useMoney();
+  const { transactions, budgets, expenseCategories, incomeCategories, currentTheme, adminSettings, setActiveTab } = useMoney();
 
   // Printable sheet ref and PDF state
   const printableSheetRef = useRef<HTMLDivElement>(null);
@@ -271,8 +294,30 @@ export const LiveReportSystem: React.FC = () => {
     };
   }).sort((a, b) => b.amount - a.amount);
 
+  // Live Sector Breakdown derived dynamically from real live transactions
+  const liveSectorMap: { [key: string]: { name: string; type: 'income' | 'expense'; amount: number } } = {};
+
+  monthFilteredTransactions.forEach((t) => {
+    if (!t.category) return;
+    const catClean = t.category.trim();
+    const tType: 'income' | 'expense' = isIncomeType(t.type) ? 'income' : 'expense';
+    const key = `${tType}_${catClean.toLowerCase()}`;
+
+    if (!liveSectorMap[key]) {
+      liveSectorMap[key] = {
+        name: catClean,
+        type: tType,
+        amount: 0,
+      };
+    }
+    liveSectorMap[key].amount += Math.abs(t.amount || 0);
+  });
+
+  const liveSectorList = Object.values(liveSectorMap).sort((a, b) => b.amount - a.amount);
+
   // Line Chart Date Data
   const dateMap: { [date: string]: { income: number; expense: number } } = {};
+
   monthFilteredTransactions.forEach((t) => {
     if (!dateMap[t.date]) {
       dateMap[t.date] = { income: 0, expense: 0 };
@@ -299,7 +344,7 @@ export const LiveReportSystem: React.FC = () => {
   return (
     <div className="space-y-4 pb-28">
       {/* 1. Multi-Tab Bar preserving ALL system views */}
-      <div className="bg-slate-900 border border-slate-800 p-1.5 rounded-2xl flex items-center gap-1 overflow-x-auto scrollbar-none shadow-xl text-xs font-bold">
+      <div className="no-print bg-slate-900 border border-slate-800 p-1.5 rounded-2xl flex items-center gap-1 overflow-x-auto scrollbar-none shadow-xl text-xs font-bold">
         <button
           onClick={() => setActiveView('categoryChart')}
           className={`py-2 px-3 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 ${
@@ -313,12 +358,8 @@ export const LiveReportSystem: React.FC = () => {
         </button>
 
         <button
-          onClick={() => setActiveView('accounts')}
-          className={`py-2 px-3 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 ${
-            activeView === 'accounts'
-              ? 'bg-amber-400 text-slate-950 font-black shadow-md'
-              : 'text-slate-400 hover:text-white'
-          }`}
+          onClick={() => setActiveTab('accounts')}
+          className={`py-2 px-3 rounded-xl transition-all whitespace-nowrap flex items-center gap-1.5 text-slate-400 hover:text-white`}
         >
           <BarChart3 className="w-3.5 h-3.5" />
           <span>অ্যাকাউন্টস</span>
@@ -362,7 +403,7 @@ export const LiveReportSystem: React.FC = () => {
       </div>
 
       {/* 2. Top Yellow Header matching Screenshot 3 */}
-      <div className="bg-amber-400 p-2 sm:p-3 rounded-2xl shadow-xl space-y-2">
+      <div className="no-print bg-amber-400 p-2 sm:p-3 rounded-2xl shadow-xl space-y-2">
         <div className="flex items-center justify-between">
           {/* Black / Yellow Expense, Income & All Pill Toggle */}
           <div className="flex bg-amber-400 border border-slate-900/30 p-0.5 rounded-2xl w-60 sm:w-64">
@@ -921,9 +962,9 @@ export const LiveReportSystem: React.FC = () => {
 
               <button
                 onClick={() => {
-                  const headers = ['Date,Type,Category,Note,Amount\n'];
+                  const headers = ['Date,Day,Time,Type,Category,Account,Note,Amount\n'];
                   const rows = monthFilteredTransactions.map(
-                    (t) => `"${t.date}","${t.type}","${t.category}","${t.note || ''}",${t.amount}\n`
+                    (t) => `"${t.date}","${getBengaliDayName(t.date)}","${getFormattedTxTime(t)}","${t.type}","${t.category}","${t.paymentMethod || 'Cash'}","${t.note || ''}",${t.amount}\n`
                   );
                   const blob = new Blob([...headers, ...rows], { type: 'text/csv;charset=utf-8;' });
                   const url = URL.createObjectURL(blob);
@@ -944,7 +985,7 @@ export const LiveReportSystem: React.FC = () => {
               <Search className="w-4 h-4 text-slate-500 absolute left-3 top-3" />
               <input
                 type="text"
-                placeholder="🔍 খাত বা নোট দিয়ে সার্চ করুন..."
+                placeholder="🔍 খাত, নোট বা অ্যাকাউন্ট দিয়ে সার্চ করুন..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 className="w-full bg-slate-950 border border-slate-800 rounded-xl pl-9 pr-4 py-2 text-xs text-slate-100 focus:outline-none focus:border-amber-400"
@@ -957,9 +998,12 @@ export const LiveReportSystem: React.FC = () => {
                 <thead>
                   <tr className="bg-slate-950 text-slate-400 border-b border-slate-800">
                     <th className="p-2.5">তারিখ (DATE)</th>
+                    <th className="p-2.5">বার (DAY)</th>
+                    <th className="p-2.5">সময় (TIME)</th>
                     <th className="p-2.5">ধরন</th>
                     <th className="p-2.5">খাত (SECTOR)</th>
-                    <th className="p-2.5">নোট</th>
+                    <th className="p-2.5">অ্যাকাউন্ট (ACCOUNT)</th>
+                    <th className="p-2.5">নোট (NOTE)</th>
                     <th className="p-2.5 text-right">পরিমাণ (BDT)</th>
                   </tr>
                 </thead>
@@ -967,33 +1011,43 @@ export const LiveReportSystem: React.FC = () => {
                   {monthFilteredTransactions
                     .filter((t) =>
                       t.category.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                      t.note.toLowerCase().includes(searchQuery.toLowerCase())
+                      (t.note || '').toLowerCase().includes(searchQuery.toLowerCase()) ||
+                      (t.paymentMethod || '').toLowerCase().includes(searchQuery.toLowerCase())
                     )
-                    .map((tx) => (
-                      <tr key={tx.id} className="hover:bg-slate-950/40">
-                        <td className="p-2.5 text-slate-300 whitespace-nowrap">📅 {tx.date}</td>
-                        <td className="p-2.5 whitespace-nowrap">
-                          <span
-                            className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
-                              tx.type === 'income'
-                                ? 'bg-emerald-500/20 text-emerald-400'
-                                : 'bg-rose-500/20 text-rose-400'
+                    .map((tx) => {
+                      const dayName = getBengaliDayName(tx.date);
+                      const timeStr = getFormattedTxTime(tx);
+                      return (
+                        <tr key={tx.id} className="hover:bg-slate-950/40">
+                          <td className="p-2.5 text-slate-300 whitespace-nowrap">📅 {tx.date}</td>
+                          <td className="p-2.5 text-amber-400 font-sans font-bold whitespace-nowrap">🗓️ {dayName || 'আজ'}</td>
+                          <td className="p-2.5 text-sky-400 whitespace-nowrap">⏰ {timeStr}</td>
+                          <td className="p-2.5 whitespace-nowrap">
+                            <span
+                              className={`px-2 py-0.5 rounded-full text-[10px] font-bold ${
+                                tx.type === 'income'
+                                  ? 'bg-emerald-500/20 text-emerald-400 border border-emerald-500/30'
+                                  : 'bg-rose-500/20 text-rose-400 border border-rose-500/30'
+                              }`}
+                            >
+                              {tx.type === 'income' ? 'আয়' : 'ব্যয়'}
+                            </span>
+                          </td>
+                          <td className="p-2.5 text-white font-bold font-sans whitespace-nowrap">{tx.category}</td>
+                          <td className="p-2.5 text-indigo-300 font-sans text-[11px] whitespace-nowrap">
+                            💳 {tx.paymentMethod || 'Cash'}
+                          </td>
+                          <td className="p-2.5 text-slate-300 font-sans text-[11px] min-w-[120px]">{tx.note || '-'}</td>
+                          <td
+                            className={`p-2.5 text-right font-black whitespace-nowrap ${
+                              tx.type === 'income' ? 'text-emerald-400' : 'text-amber-400'
                             }`}
                           >
-                            {tx.type === 'income' ? 'আয়' : 'ব্যয়'}
-                          </span>
-                        </td>
-                        <td className="p-2.5 text-white font-bold font-sans whitespace-nowrap">{tx.category}</td>
-                        <td className="p-2.5 text-slate-400 font-sans text-[11px]">{tx.note || '-'}</td>
-                        <td
-                          className={`p-2.5 text-right font-black whitespace-nowrap ${
-                            tx.type === 'income' ? 'text-emerald-400' : 'text-amber-400'
-                          }`}
-                        >
-                          ৳{tx.amount.toLocaleString()} BDT
-                        </td>
-                      </tr>
-                    ))}
+                            ৳{tx.amount.toLocaleString('en-US')} BDT
+                          </td>
+                        </tr>
+                      );
+                    })}
                 </tbody>
               </table>
             </div>
@@ -1005,14 +1059,14 @@ export const LiveReportSystem: React.FC = () => {
       {activeView === 'researchPart2' && (
         <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} className="space-y-4">
           {/* Top Bar with Print & Download Controls */}
-          <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
+          <div className="no-print bg-slate-900 border border-slate-800 p-4 rounded-3xl flex flex-col sm:flex-row items-center justify-between gap-3 shadow-xl">
             <div>
               <h3 className="text-sm font-bold text-white flex items-center gap-2">
                 <Sparkles className="w-4 h-4 text-amber-400" />
                 <span>গবেষণা পার্ট ২: A4 সাইজ অফিসিয়াল রিপোর্ট</span>
               </h3>
               <p className="text-xs text-slate-400 mt-0.5">
-                উপরে আর্থিক গবেষণা বিশ্লেষণ এবং নিচে সম্পূর্ণ আয়-ব্যয় খাতের তালিকা
+                উপরে আর্থিক গবেষণা বিশ্লেষণ এবং নিচে সম্পূর্ণ লাইভ আয়-ব্যয় খাতের তালিকা
               </p>
             </div>
 
@@ -1037,7 +1091,7 @@ export const LiveReportSystem: React.FC = () => {
 
               <button
                 onClick={() => window.print()}
-                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg shrink-0 transition-all active:scale-95"
+                className="px-4 py-2 bg-amber-400 hover:bg-amber-300 text-slate-950 font-black text-xs rounded-xl flex items-center gap-2 shadow-lg shrink-0 transition-all active:scale-95 cursor-pointer"
               >
                 <Printer className="w-4 h-4" />
                 <span>📄 A4 প্রিন্ট</span>
@@ -1048,7 +1102,7 @@ export const LiveReportSystem: React.FC = () => {
           {/* Printable A4 Document Sheet */}
           <div
             ref={printableSheetRef}
-            className="bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-2xl border border-slate-200 max-w-4xl mx-auto space-y-6 font-sans print:shadow-none print:border-none print:p-0 print:m-0"
+            className="printable-a4-container bg-white text-slate-900 p-6 sm:p-10 rounded-2xl shadow-2xl border border-slate-200 max-w-4xl mx-auto space-y-6 font-sans print:shadow-none print:border-none print:p-0 print:m-0"
           >
             {/* 1. Official Header / Letterhead */}
             <div className="border-b-2 border-slate-900 pb-4 flex flex-col sm:flex-row justify-between items-start sm:items-center gap-3">
@@ -1163,7 +1217,7 @@ export const LiveReportSystem: React.FC = () => {
                         <span>গবেষণা পর্যবেক্ষণ ১: শীর্ষ ব্যয় খাত বিশ্লেষণ</span>
                       </p>
                       <p className="text-slate-600">
-                        চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে <span className="font-bold text-slate-950">{categoryList[0]?.name || 'খাদ্য'}</span> খাতে। এই খাতে আপনার মোট খরচের <span className="font-bold text-slate-950">{categoryList[0]?.percentage.toFixed(1) || '36.98'}%</span> ব্যয় হয়েছে।
+                        চলতি মাসে আপনার প্রধান ব্যয় নিবন্ধিত হয়েছে <span className="font-bold text-slate-950">{categoryList[0]?.name || 'খাদ্য'}</span> খাতে। এই খাতে আপনার মোট খরচের <span className="font-bold text-slate-950">{categoryList[0]?.percentage.toFixed(1) || '0.0'}%</span> ব্যয় হয়েছে।
                       </p>
                     </div>
 
@@ -1181,19 +1235,19 @@ export const LiveReportSystem: React.FC = () => {
               </div>
             </div>
 
-            {/* 3. SECTOR BREAKDOWN LIST BELOW (নিচে আয় ব্যায় খাত থাকবে) */}
+            {/* 3. SECTOR BREAKDOWN LIST BELOW (লাইভ আয় ব্যায় খাত) */}
             <div className="space-y-3">
               <div className="flex items-center justify-between border-b border-slate-300 pb-2">
                 <h2 className="text-sm font-black text-slate-900 flex items-center gap-1.5 uppercase tracking-wide">
                   <Layers className="w-4 h-4 text-indigo-600" />
-                  <span>২. খাতভিত্তিক আয় ও ব্যয় বিবরণী (SECTOR BREAKDOWN)</span>
+                  <span>২. লাইভ খাতভিত্তিক আয় ও ব্যয় বিবরণী (SECTOR BREAKDOWN)</span>
                 </h2>
                 <span className="text-xs text-slate-500 font-mono">
-                  মোট খাত: {expenseCategories.filter(c => !c.isHidden).length + incomeCategories.filter(c => !c.isHidden).length}টি
+                  মোট সক্রিয় খাত: {liveSectorList.length}টি
                 </span>
               </div>
 
-              {/* Expense & Income Sector Table */}
+              {/* Dynamic Live Sector Table */}
               <div className="overflow-x-auto border border-slate-300 rounded-lg">
                 <table className="w-full text-left border-collapse text-xs">
                   <thead>
@@ -1206,67 +1260,47 @@ export const LiveReportSystem: React.FC = () => {
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-200 font-medium">
-                    {/* Active Expense Categories in sequence */}
-                    {expenseCategories
-                      .filter((c) => !c.isHidden)
-                      .map((cat) => {
-                        const amt = categoryMap[cat.nameBn] || categoryMap[cat.name] || 0;
-                        const pct = totalExpense > 0 ? (amt / totalExpense) * 100 : 0;
+                    {liveSectorList.length > 0 ? (
+                      liveSectorList.map((sec, idx) => {
+                        const totalForType = sec.type === 'income' ? totalIncome : totalExpense;
+                        const pct = totalForType > 0 ? (sec.amount / totalForType) * 100 : 0;
                         return (
-                          <tr key={cat.id} className="hover:bg-slate-50">
+                          <tr key={`${sec.type}_${sec.name}_${idx}`} className="hover:bg-slate-50">
                             <td className="p-2.5 font-bold text-slate-900 flex items-center gap-1.5">
-                              <span>{cat.nameBn}</span>
+                              <span>{sec.name}</span>
                             </td>
                             <td className="p-2.5">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-rose-100 text-rose-800">
-                                ব্যয়
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  sec.type === 'income'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-rose-100 text-rose-800'
+                                }`}
+                              >
+                                {sec.type === 'income' ? 'আয়' : 'ব্যয়'}
                               </span>
                             </td>
                             <td className="p-2.5 text-right font-bold font-mono text-slate-900">
-                              ৳{amt.toLocaleString('en-US')}
+                              ৳{sec.amount.toLocaleString('en-US')}
                             </td>
                             <td className="p-2.5 text-right font-mono text-slate-700">
                               {pct.toFixed(2)}%
                             </td>
                             <td className="p-2.5 text-center">
                               <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                সক্রিয়
+                                সক্রিয় (লাইভ)
                               </span>
                             </td>
                           </tr>
                         );
-                      })}
-
-                    {/* Active Income Categories in sequence */}
-                    {incomeCategories
-                      .filter((c) => !c.isHidden)
-                      .map((cat) => {
-                        const amt = categoryMap[cat.nameBn] || categoryMap[cat.name] || 0;
-                        const pct = totalIncome > 0 ? (amt / totalIncome) * 100 : 0;
-                        return (
-                          <tr key={cat.id} className="hover:bg-slate-50">
-                            <td className="p-2.5 font-bold text-slate-900 flex items-center gap-1.5">
-                              <span>{cat.nameBn}</span>
-                            </td>
-                            <td className="p-2.5">
-                              <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-emerald-100 text-emerald-800">
-                                আয়
-                              </span>
-                            </td>
-                            <td className="p-2.5 text-right font-bold font-mono text-slate-900">
-                              ৳{amt.toLocaleString('en-US')}
-                            </td>
-                            <td className="p-2.5 text-right font-mono text-slate-700">
-                              {pct.toFixed(2)}%
-                            </td>
-                            <td className="p-2.5 text-center">
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
-                                সক্রিয়
-                              </span>
-                            </td>
-                          </tr>
-                        );
-                      })}
+                      })
+                    ) : (
+                      <tr>
+                        <td colSpan={5} className="p-4 text-center text-slate-500 font-medium">
+                          লাইভ ডাটাবেজে এই সময়ের কোনো লেনদেন পাওয়া যায়নি।
+                        </td>
+                      </tr>
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1282,7 +1316,7 @@ export const LiveReportSystem: React.FC = () => {
 
               <div className="text-center space-y-1">
                 <p className="text-[10px] font-mono text-slate-400">A4 OFFICIAL REPORT - PART 2</p>
-                <p className="text-[10px] text-slate-500">স্বয়ংক্রিয় আর্থিক স্টেটমেন্ট</p>
+                <p className="text-[10px] text-slate-500">স্বয়ংক্রিয় লাইভ আর্থিক স্টেটমেন্ট</p>
               </div>
 
               <div className="space-y-1 text-right">

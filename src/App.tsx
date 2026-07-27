@@ -10,15 +10,17 @@ import { DebtManagerView } from './components/DebtManagerView';
 import { SavingsView } from './components/SavingsView';
 import { BudgetView } from './components/BudgetView';
 import { ReportsView } from './components/ReportsView';
+import { AccountsView } from './components/AccountsView';
 import { AdminPanelView } from './components/AdminPanelView';
 import { ProfileView } from './components/ProfileView';
+import { AuthView } from './components/AuthView';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { TransferModal } from './components/TransferModal';
 import { SearchModal } from './components/SearchModal';
 import { TransactionType } from './types';
 
 function MainAppContent() {
-  const { isSplashActive, dismissSplash, activeTab, currentTheme } = useMoney();
+  const { isSplashActive, dismissSplash, activeTab, currentTheme, currentUser } = useMoney();
 
   const [addModalType, setAddModalType] = useState<TransactionType | null>(null);
   const [isTransferOpen, setIsTransferOpen] = useState(false);
@@ -26,6 +28,16 @@ function MainAppContent() {
 
   if (isSplashActive) {
     return <SplashScreen onDismiss={dismissSplash} />;
+  }
+
+  if (!currentUser || activeTab === 'auth') {
+    return (
+      <div className={`min-h-screen ${currentTheme.bgClass} flex flex-col font-sans antialiased transition-colors duration-300`}>
+        <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+          <AuthView />
+        </main>
+      </div>
+    );
   }
 
   return (
@@ -55,6 +67,7 @@ function MainAppContent() {
         {activeTab === 'savings' && <SavingsView />}
         {activeTab === 'budget' && <BudgetView />}
         {activeTab === 'reports' && <ReportsView />}
+        {activeTab === 'accounts' && <AccountsView />}
         {activeTab === 'admin' && <AdminPanelView />}
         {activeTab === 'profile' && <ProfileView />}
       </main>

@@ -2,11 +2,16 @@ export type TransactionType = 'income' | 'expense';
 
 export type PaymentMethod = string;
 
+export type AccountCategoryType = 'cash' | 'bank' | 'virtual' | 'receivable' | 'investment';
+
 export interface AccountMethod {
   id: string;
   name: string;
   nameBn: string;
+  category?: AccountCategoryType;
+  initialBalance?: number;
   isHidden?: boolean;
+  isPinned?: boolean;
 }
 
 export interface Transaction {
@@ -92,10 +97,35 @@ export interface ChatMessage {
   isVoiceResponse?: boolean;
 }
 
+export interface AppUser {
+  id: string; // phone number or unique uid
+  name: string;
+  phone: string;
+  password?: string;
+  adminPassword?: string; // User-customized admin panel password
+  createdAt: number;
+  isApproved: boolean; // default true (অটো অনুমোদন)
+  role: 'user' | 'admin';
+}
+
+export interface SupportMessage {
+  id: string;
+  userId: string;
+  userName: string;
+  userPhone: string;
+  sender: 'user' | 'admin';
+  text: string;
+  timestamp: number;
+  isReadByAdmin?: boolean;
+  isReadByUser?: boolean;
+}
+
 export interface UserProfile {
   name: string;
   email: string;
+  phone?: string;
   currency: string;
+  currencySymbol?: string;
   isPremium: boolean;
   pinLockEnabled: boolean;
   pinCode: string;

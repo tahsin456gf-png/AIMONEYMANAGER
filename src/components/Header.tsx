@@ -1,5 +1,6 @@
 import React, { useState } from 'react';
 import { useMoney } from '../context/MoneyContext';
+import { SupportChatModal } from './SupportChatModal';
 import {
   Bot,
   Bell,
@@ -12,6 +13,7 @@ import {
   X,
   Lock,
   ArrowLeftRight,
+  MessageCircle,
 } from 'lucide-react';
 
 interface HeaderProps {
@@ -30,14 +32,22 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, onOpenTransfer }) 
     clearNotifications,
     isPinUnlocked,
     currentTheme,
+    supportMessages,
+    currentUser,
   } = useMoney();
 
   const [showNotifs, setShowNotifs] = useState(false);
+  const [showSupportModal, setShowSupportModal] = useState(false);
 
   const unreadCount = notifications.filter((n) => !n.isRead).length;
 
+  // Unread support replies from main admin
+  const unreadSupportCount = supportMessages.filter(
+    (m) => (m.userId === currentUser?.id || m.userPhone === currentUser?.phone) && m.sender === 'admin' && !m.isReadByUser
+  ).length;
+
   return (
-    <header className={`sticky top-0 z-40 ${currentTheme.headerBgClass} backdrop-blur-xl border-b px-4 py-3 transition-colors duration-300`}>
+    <header className={`sticky top-0 z-40 no-print ${currentTheme.headerBgClass} backdrop-blur-xl border-b px-4 py-3 transition-colors duration-300`}>
       <div className="max-w-7xl mx-auto flex items-center justify-between gap-3">
         {/* Logo & App Title */}
         <div
@@ -169,6 +179,21 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, onOpenTransfer }) 
             )}
           </div>
 
+          {/* Live Admin Support Button */}
+          <button
+            onClick={() => setShowSupportModal(true)}
+            className="p-2 rounded-xl bg-amber-500/10 hover:bg-amber-500/20 text-amber-400 border border-amber-500/30 transition-all flex items-center gap-1.5 text-xs font-semibold relative"
+            title="মেইন এডমিন সাপোর্ট চ্যাট"
+          >
+            <MessageCircle className="w-4 h-4 text-amber-400" />
+            <span className="hidden md:inline">সাপোর্ট</span>
+            {unreadSupportCount > 0 && (
+              <span className="absolute -top-1 -right-1 w-4 h-4 bg-amber-500 text-slate-950 text-[10px] font-black rounded-full flex items-center justify-center animate-pulse">
+                {unreadSupportCount}
+              </span>
+            )}
+          </button>
+
           {/* Admin / Profile Trigger */}
           <button
             onClick={() => setActiveTab('admin')}
@@ -184,6 +209,8 @@ export const Header: React.FC<HeaderProps> = ({ onOpenSearch, onOpenTransfer }) 
           </button>
         </div>
       </div>
+
+      <SupportChatModal isOpen={showSupportModal} onClose={() => setShowSupportModal(false)} />
     </header>
   );
 };

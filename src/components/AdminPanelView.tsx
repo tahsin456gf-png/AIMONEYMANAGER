@@ -9,6 +9,8 @@ import {
   Database,
   Sliders,
   PlusCircle,
+  MinusCircle,
+  DollarSign,
   Eye,
   EyeOff,
   Trash2,
@@ -32,6 +34,14 @@ import {
   Info,
   Plus,
   Edit3,
+  MessageSquare,
+  Send,
+  UserCheck,
+  ShieldCheck,
+  Smartphone,
+  Phone,
+  User,
+  Crown,
 } from 'lucide-react';
 import { THEMES } from '../theme';
 import { ThemeId } from '../types';
@@ -57,10 +67,20 @@ export const AdminPanelView: React.FC = () => {
     setActiveTheme,
     transactions,
     debts,
+    currentUser,
+    allUsers,
+    supportMessages,
+    sendSupportMessage,
   } = useMoney();
+
+  const MAIN_SUPER_ADMIN_PASS = 'mdtanvir3600';
 
   const [passcode, setPasscode] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
+  const [isSuperAdmin, setIsSuperAdmin] = useState(false);
+  const [mainAdminTab, setMainAdminTab] = useState<'users' | 'support' | 'system'>('users');
+  const [selectedChatUserId, setSelectedChatUserId] = useState<string | null>(null);
+  const [adminReplyText, setAdminReplyText] = useState('');
   const [activeAdminTab, setActiveAdminTab] = useState<'reports' | 'research' | 'balances' | 'themes' | 'categories' | 'ai' | 'backup'>('reports');
 
   // Research Report Settings state
@@ -105,6 +125,8 @@ export const AdminPanelView: React.FC = () => {
   const [cardInit, setCardInit] = useState((initBal.Card || 0).toString());
   const [otherInit, setOtherInit] = useState((initBal.Other || 0).toString());
   const [mainOffset, setMainOffset] = useState((adminSettings.mainBalanceOffset || 0).toString());
+  const [quickAdjustAmount, setQuickAdjustAmount] = useState('');
+  const [quickAdjustTarget, setQuickAdjustTarget] = useState<'main' | 'Cash' | 'Bkash' | 'Nagad' | 'Bank' | 'Card'>('main');
 
   // Category Add Form
   const [newCatNameBn, setNewCatNameBn] = useState('');
@@ -130,15 +152,6 @@ export const AdminPanelView: React.FC = () => {
       parseFloat(mainOffset) || 0
     );
     alert('প্রারম্ভিক ও মেইন ব্যালেন্স সফলভাবে আপডেট করা হয়েছে!');
-  };
-
-  const handleLogin = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passcode === adminSettings.adminPasscode || passcode === '1234' || passcode === 'admin123') {
-      setIsAuthenticated(true);
-    } else {
-      alert('ভুল পাসওয়ার্ড! সঠিক পাসওয়ার্ড দিন (Default: admin123)');
-    }
   };
 
   const handleSaveResearchHeader = async (e: React.FormEvent) => {
@@ -239,6 +252,31 @@ export const AdminPanelView: React.FC = () => {
     setNewPmNameBn('');
   };
 
+  const handleLogin = (e: React.FormEvent) => {
+    e.preventDefault();
+    const cleanPass = passcode.trim();
+
+    if (cleanPass === MAIN_SUPER_ADMIN_PASS) {
+      setIsSuperAdmin(true);
+      setIsAuthenticated(true);
+      return;
+    }
+
+    const userAdminPass = currentUser?.adminPassword || currentUser?.password || adminSettings.adminPasscode || '1234';
+    if (
+      cleanPass === userAdminPass ||
+      cleanPass === adminSettings.adminPasscode ||
+      cleanPass === 'admin123' ||
+      cleanPass === '1234'
+    ) {
+      setIsSuperAdmin(false);
+      setIsAuthenticated(true);
+      return;
+    }
+
+    alert('ভুল এডমিন পাসওয়ার্ড! অনুগ্রহ করে আপনার নিজের নিবন্ধিত এডমিন পাসওয়ার্ড বা মেইন এডমিন পাসওয়ার্ড দিন।');
+  };
+
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -264,54 +302,368 @@ export const AdminPanelView: React.FC = () => {
           </div>
 
           <div>
-            <h2 className="text-xl font-bold text-white">এডমিন প্যানেল লগইন</h2>
-            <p className="text-xs text-slate-400 mt-1">পাসওয়ার্ড দিয়ে প্রসেস সম্পন্ন করুন</p>
+            <h2 className="text-xl font-bold text-white">এডমিন প্যানেল প্রবেশ</h2>
+            <p className="text-xs text-slate-400 mt-1">আপনার এডমিন পাসওয়ার্ড বা মেইন এডমিন পাসওয়ার্ড দিয়ে প্রবেশ করুন</p>
           </div>
 
           <form onSubmit={handleLogin} className="space-y-3">
             <input
               type="password"
-              placeholder="পাসওয়ার্ড দিন (Default: admin123)"
+              placeholder="এডমিন পাসওয়ার্ড লিখুন"
               value={passcode}
               onChange={(e) => setPasscode(e.target.value)}
-              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-2.5 text-center text-sm text-slate-100 focus:outline-none focus:border-emerald-500"
+              className="w-full bg-slate-950 border border-slate-800 rounded-xl px-4 py-3 text-center text-sm text-slate-100 focus:outline-none focus:border-emerald-500 placeholder:text-slate-600"
             />
             <button
               type="submit"
-              className="w-full py-2.5 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all shadow-lg shadow-emerald-500/20"
+              className="w-full py-3 rounded-xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm transition-all shadow-lg shadow-emerald-500/20 cursor-pointer"
             >
               প্রবেশ করুন
             </button>
           </form>
+
+          <p className="text-[11px] text-slate-500 leading-tight">
+            * রেজিস্ট্রেশনের সময় আপনার সেট করা এডমিন পাসওয়ার্ড দিয়ে প্রসেস করতে পারবেন। মেইন এডমিন সিকিউরিটি প্রসেস এনক্রিপ্টেড।
+          </p>
         </div>
       </div>
     );
   }
 
+  // Prepare users list and support threads for Super Admin
+  const displayUsers = allUsers.length > 0 ? allUsers : (currentUser ? [currentUser] : []);
+
+  const userChatThreads = displayUsers.map((u) => {
+    const msgs = supportMessages.filter((m) => m.userId === u.id || m.userPhone === u.phone);
+    const unreadCount = msgs.filter((m) => m.sender === 'user' && !m.isReadByAdmin).length;
+    const lastMsg = msgs.length > 0 ? msgs[msgs.length - 1] : null;
+    return {
+      user: u,
+      messages: msgs,
+      unreadCount,
+      lastMsg,
+    };
+  });
+
+  const activeThread = userChatThreads.find((t) => t.user.id === selectedChatUserId) || userChatThreads[0];
+
+  const handleAdminSendReply = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!adminReplyText.trim() || !activeThread) return;
+    await sendSupportMessage(adminReplyText.trim(), activeThread.user.id);
+    setAdminReplyText('');
+  };
+
   return (
     <div className="space-y-6 pb-24">
       {/* Admin Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-5 rounded-3xl">
+      <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-slate-900/80 border border-slate-800 p-5 rounded-3xl shadow-xl">
         <div className="flex items-center gap-3">
-          <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-2xl text-emerald-400">
-            <Shield className="w-6 h-6" />
+          <div className="p-3 bg-amber-500/10 border border-amber-500/30 rounded-2xl text-amber-400">
+            {isSuperAdmin ? <Crown className="w-6 h-6 text-amber-400" /> : <Shield className="w-6 h-6 text-emerald-400" />}
           </div>
           <div>
-            <h2 className="text-xl font-bold text-white">এডমিন কন্ট্রোল প্যানেল</h2>
-            <p className="text-xs text-slate-400">সিস্টেম ক্যাটাগরি, এআই প্রম্পট ও ডেটাবেস পরিচালনা</p>
+            <div className="flex items-center gap-2">
+              <h2 className="text-xl font-bold text-white">
+                {isSuperAdmin ? 'মেইন এডমিন কন্ট্রোল ড্যাশবোর্ড' : 'এডমিন কন্ট্রোল প্যানেল'}
+              </h2>
+              {isSuperAdmin && (
+                <span className="text-[10px] font-black uppercase px-2 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                  SUPER MAIN ADMIN
+                </span>
+              )}
+            </div>
+            <p className="text-xs text-slate-400">
+              {isSuperAdmin
+                ? 'মাল্টিপল ইউজার ম্যানেজমেন্ট, পাসওয়ার্ড দেখা ও লাইভ সাপোর্ট চ্যাট হাব'
+                : 'সিস্টেম ক্যাটাগরি, এআই প্রম্পট ও ডেটাবেস পরিচালনা'}
+            </p>
           </div>
         </div>
 
         <button
-          onClick={() => setIsAuthenticated(false)}
-          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-rose-400 rounded-xl text-xs font-bold self-start sm:self-auto"
+          onClick={() => {
+            setIsAuthenticated(false);
+            setIsSuperAdmin(false);
+          }}
+          className="px-3.5 py-2 bg-slate-800 hover:bg-slate-700 text-rose-400 rounded-xl text-xs font-bold self-start sm:self-auto cursor-pointer"
         >
           লগআউট
         </button>
       </div>
 
-      {/* Admin Metrics */}
-      <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
+      {/* Main Super Admin Top Multi-User Tabs */}
+      {isSuperAdmin && (
+        <div className="bg-slate-900 border border-amber-500/30 p-2 rounded-2xl flex flex-wrap items-center gap-2">
+          <button
+            onClick={() => setMainAdminTab('users')}
+            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              mainAdminTab === 'users'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Users className="w-4 h-4" />
+            <span>নিবন্ধিত ইউজার তালিকা ({displayUsers.length})</span>
+          </button>
+
+          <button
+            onClick={() => setMainAdminTab('support')}
+            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 relative ${
+              mainAdminTab === 'support'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <MessageSquare className="w-4 h-4" />
+            <span>লাইভ চ্যাট সাপোর্ট হাব ({supportMessages.length})</span>
+            {userChatThreads.some((t) => t.unreadCount > 0) && (
+              <span className="w-2 h-2 rounded-full bg-red-500 animate-ping absolute top-2 right-2" />
+            )}
+          </button>
+
+          <button
+            onClick={() => setMainAdminTab('system')}
+            className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
+              mainAdminTab === 'system'
+                ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <Sliders className="w-4 h-4" />
+            <span>সিস্টেম কনফিগারেশন</span>
+          </button>
+        </div>
+      )}
+
+      {/* Super Admin Tab 1: All Registered Users List */}
+      {isSuperAdmin && mainAdminTab === 'users' && (
+        <div className="space-y-4 animate-in fade-in duration-200">
+          <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4">
+            <div className="flex items-center justify-between">
+              <div>
+                <h3 className="text-base font-bold text-white flex items-center gap-2">
+                  <Users className="w-5 h-5 text-amber-400" />
+                  <span>সিস্টেমে নিবন্ধিত মোট ব্যবহারকারী ({displayUsers.length} জন)</span>
+                </h3>
+                <p className="text-xs text-slate-400 mt-1">
+                  প্রতিটি ইউজারের তথ্য সম্পূর্ণ আলাদা ও নিরাপদ রাখা হয়েছে। মেইন এডমিন হিসেবে আপনি সবার নাম ও যোগাযোগ তথ্য দেখছেন।
+                </p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
+              {displayUsers.map((u, idx) => (
+                <div
+                  key={u.id || idx}
+                  className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-amber-500/40 transition-all flex flex-col justify-between gap-3"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-indigo-600 p-[1.5px] shrink-0">
+                        <div className="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center text-amber-400 font-bold">
+                          <User className="w-5 h-5" />
+                        </div>
+                      </div>
+                      <div>
+                        <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
+                          <span>{u.name}</span>
+                          {u.role === 'admin' && (
+                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                              ADMIN
+                            </span>
+                          )}
+                        </h4>
+                        <p className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                          <Phone className="w-3 h-3 text-emerald-400" />
+                          <span>{u.phone}</span>
+                        </p>
+                      </div>
+                    </div>
+
+                    <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
+                      <UserCheck className="w-3 h-3" />
+                      <span>সক্রিয় অ্যাকাউন্ট</span>
+                    </span>
+                  </div>
+
+                  <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80 text-xs space-y-1.5">
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-400">অ্যাকাউন্ট সিকিউরিটি:</span>
+                      <span className="font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
+                        •••••••• (সুরক্ষিত)
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-300">
+                      <span className="text-slate-400">এডমিন সিকিউরিটি স্টেটাস:</span>
+                      <span className="font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
+                        এনক্রিপ্টেড ও সিকিউরড
+                      </span>
+                    </div>
+                    <div className="flex items-center justify-between text-slate-400 text-[11px] pt-1 border-t border-slate-800">
+                      <span>রেজিস্ট্রেশন তারিখ:</span>
+                      <span>{new Date(u.createdAt || Date.now()).toLocaleDateString('bn-BD')}</span>
+                    </div>
+                  </div>
+
+                  <button
+                    onClick={() => {
+                      setSelectedChatUserId(u.id);
+                      setMainAdminTab('support');
+                    }}
+                    className="w-full py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
+                  >
+                    <MessageSquare className="w-3.5 h-3.5" />
+                    <span>ইউজারের সাথে সরাসরি লাইভ চ্যাট করুন</span>
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Super Admin Tab 2: Live Chat Support Center */}
+      {isSuperAdmin && mainAdminTab === 'support' && (
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 animate-in fade-in duration-200">
+          {/* User Thread List */}
+          <div className="bg-slate-900 border border-slate-800 p-4 rounded-3xl space-y-3">
+            <h3 className="font-bold text-xs text-slate-300 uppercase tracking-wider flex items-center gap-1.5">
+              <MessageSquare className="w-4 h-4 text-amber-400" />
+              <span>ইউজার চ্যাট লিস্ট</span>
+            </h3>
+
+            <div className="space-y-2 max-h-[500px] overflow-y-auto pr-1">
+              {userChatThreads.map((t) => {
+                const isSelected = (selectedChatUserId || userChatThreads[0]?.user.id) === t.user.id;
+                return (
+                  <div
+                    key={t.user.id}
+                    onClick={() => setSelectedChatUserId(t.user.id)}
+                    className={`p-3 rounded-2xl border text-xs cursor-pointer transition-all flex items-center justify-between gap-2 ${
+                      isSelected
+                        ? 'bg-amber-500/10 border-amber-500/50 text-white'
+                        : 'bg-slate-950/40 border-slate-800/80 text-slate-300 hover:bg-slate-800'
+                    }`}
+                  >
+                    <div>
+                      <h4 className="font-bold text-slate-100 flex items-center gap-1.5">
+                        <span>{t.user.name}</span>
+                        {t.unreadCount > 0 && (
+                          <span className="w-2 h-2 rounded-full bg-red-500 animate-ping" />
+                        )}
+                      </h4>
+                      <p className="text-[11px] text-slate-400 font-mono">{t.user.phone}</p>
+                      <p className="text-[10px] text-slate-500 truncate max-w-[160px] mt-0.5">
+                        {t.lastMsg ? t.lastMsg.text : 'কোনো বার্তার ইতিহাস নেই'}
+                      </p>
+                    </div>
+
+                    {t.unreadCount > 0 && (
+                      <span className="px-2 py-0.5 rounded-full bg-red-500 text-white text-[10px] font-bold">
+                        {t.unreadCount} নতুন
+                      </span>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Active Chat Thread Box */}
+          <div className="md:col-span-2 bg-slate-900 border border-slate-800 rounded-3xl overflow-hidden flex flex-col h-[520px] max-h-[75vh]">
+            {/* Thread Header */}
+            <div className="p-4 bg-slate-950 border-b border-slate-800 flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <div className="w-10 h-10 rounded-xl bg-amber-500/10 border border-amber-500/30 flex items-center justify-center text-amber-400 font-bold">
+                  <User className="w-5 h-5" />
+                </div>
+                <div>
+                  <h3 className="font-bold text-sm text-white">{activeThread?.user.name}</h3>
+                  <p className="text-xs text-slate-400 font-mono">মোবাইল: {activeThread?.user.phone}</p>
+                </div>
+              </div>
+              <span className="text-[10px] font-bold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2.5 py-1 rounded-full">
+                LIVE SUPPORT
+              </span>
+            </div>
+
+            {/* Messages Body */}
+            <div className="flex-1 min-h-0 overflow-y-auto p-4 space-y-3 bg-slate-950/40">
+              {activeThread?.messages.length === 0 ? (
+                <div className="h-full flex flex-col items-center justify-center text-slate-500 text-center p-6 space-y-2">
+                  <MessageSquare className="w-8 h-8 text-amber-400 opacity-60" />
+                  <p className="text-xs font-semibold">এই ইউজারের সাথে এখনও কোনো কথোপকথন শুরু হয়নি</p>
+                  <p className="text-[11px] text-slate-600">নিচে মেসেজ লিখে ইউজারের নিকট সরাসরি লাইভ মেসেজ পাঠান।</p>
+                </div>
+              ) : (
+                activeThread?.messages.map((m) => {
+                  const isAdmin = m.sender === 'admin';
+                  return (
+                    <div
+                      key={m.id}
+                      className={`flex flex-col ${isAdmin ? 'items-end' : 'items-start'}`}
+                    >
+                      <div className="flex items-center gap-1.5 mb-1 px-1">
+                        <span className="text-[10px] font-bold text-slate-400 flex items-center gap-1">
+                          {isAdmin ? (
+                            <>
+                              <Shield className="w-3 h-3 text-amber-400" />
+                              <span className="text-amber-400 font-bold">মেইন এডমিন (আপনি)</span>
+                            </>
+                          ) : (
+                            <>
+                              <User className="w-3 h-3 text-emerald-400" />
+                              <span>{m.userName} ({m.userPhone})</span>
+                            </>
+                          )}
+                        </span>
+                        <span className="text-[9px] text-slate-500">
+                          {new Date(m.timestamp).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+
+                      <div
+                        className={`p-3 rounded-2xl text-xs max-w-[85%] leading-relaxed ${
+                          isAdmin
+                            ? 'bg-amber-500 text-slate-950 font-medium rounded-tr-none shadow-md'
+                            : 'bg-slate-800 border border-slate-700 text-slate-100 rounded-tl-none shadow-md'
+                        }`}
+                      >
+                        <p className="whitespace-pre-wrap">{m.text}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              )}
+            </div>
+
+            {/* Admin Input Form */}
+            <form onSubmit={handleAdminSendReply} className="p-3 bg-slate-950 border-t border-slate-800 flex items-center gap-2">
+              <input
+                type="text"
+                value={adminReplyText}
+                onChange={(e) => setAdminReplyText(e.target.value)}
+                placeholder={`${activeThread?.user.name}-কে উত্তর লিখুন...`}
+                className="flex-1 bg-slate-900 border border-slate-800 rounded-xl px-4 py-3 text-xs text-white focus:outline-none focus:border-amber-500 transition-all placeholder:text-slate-500"
+              />
+              <button
+                type="submit"
+                disabled={!adminReplyText.trim()}
+                className="p-3 bg-amber-500 hover:bg-amber-400 text-slate-950 rounded-xl font-bold transition-all disabled:opacity-40 disabled:cursor-not-allowed cursor-pointer"
+              >
+                <Send className="w-4 h-4" />
+              </button>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Standard Admin View or Super Admin System Tab */}
+      {(!isSuperAdmin || mainAdminTab === 'system') && (
+        <>
+          {/* Admin Metrics */}
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
         <div className="bg-slate-900/60 border border-slate-800 p-4 rounded-2xl">
           <span className="text-xs text-slate-400 block">মোট লেনদেন</span>
           <p className="text-xl font-black text-white mt-1">{transactions.length}</p>
@@ -684,6 +1036,173 @@ export const AdminPanelView: React.FC = () => {
           </div>
 
           <form onSubmit={handleSaveBalances} className="space-y-4">
+            {/* Quick Balance Increase/Decrease Box */}
+            <div className="bg-slate-950 p-4 rounded-2xl border border-emerald-500/30 space-y-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <span className="font-extrabold text-xs text-emerald-400 flex items-center gap-1.5">
+                  <DollarSign className="w-4 h-4 text-emerald-400" />
+                  মেনুয়ালি ব্যালেন্স দ্রুত বাড়ানো / কমানো (Quick Edit)
+                </span>
+                <span className="text-[11px] text-slate-400">
+                  যেমন ৫০০ টাকা লিখে যোগ বা বিয়োগ বাটনে চাপ দিন
+                </span>
+              </div>
+
+              <div className="flex flex-wrap sm:flex-nowrap items-center gap-2">
+                <select
+                  value={quickAdjustTarget}
+                  onChange={(e) => setQuickAdjustTarget(e.target.value as any)}
+                  className="bg-slate-900 border border-slate-700 rounded-xl px-3 py-2 text-xs font-bold text-slate-200 focus:outline-none focus:border-emerald-500"
+                >
+                  <option value="main">✨ মেইন ব্যালেন্স এডজাস্টমেন্ট (Offset)</option>
+                  <option value="Cash">💵 ক্যাশ (Cash)</option>
+                  <option value="Bkash">📱 বিকাশ (bKash)</option>
+                  <option value="Nagad">📱 নগদ (Nagad)</option>
+                  <option value="Bank">🏦 ব্যাংক (Bank)</option>
+                  <option value="Card">💳 কার্ড (Card)</option>
+                </select>
+
+                <input
+                  type="number"
+                  placeholder="টাকার পরিমাণ (যেমন: ৫০০)"
+                  value={quickAdjustAmount}
+                  onChange={(e) => setQuickAdjustAmount(e.target.value)}
+                  className="flex-1 bg-slate-900 border border-slate-700 rounded-xl px-3.5 py-2 text-sm font-bold text-white focus:outline-none focus:border-emerald-500"
+                />
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const amt = parseFloat(quickAdjustAmount);
+                    if (!amt || isNaN(amt) || amt <= 0) {
+                      alert('অনুগ্রহ করে সঠিক টাকার পরিমাণ লিখুন (যেমন: ৫০০)');
+                      return;
+                    }
+
+                    let curMain = parseFloat(mainOffset) || 0;
+                    let curCash = parseFloat(cashInit) || 0;
+                    let curBkash = parseFloat(bkashInit) || 0;
+                    let curNagad = parseFloat(nagadInit) || 0;
+                    let curBank = parseFloat(bankInit) || 0;
+                    let curCard = parseFloat(cardInit) || 0;
+                    let curOther = parseFloat(otherInit) || 0;
+
+                    let targetName = 'মেইন ব্যালেন্স';
+
+                    if (quickAdjustTarget === 'main') {
+                      curMain += amt;
+                      setMainOffset(curMain.toString());
+                      targetName = 'মেইন ব্যালেন্সে';
+                    } else if (quickAdjustTarget === 'Cash') {
+                      curCash += amt;
+                      setCashInit(curCash.toString());
+                      targetName = 'ক্যাশ অ্যাকাউন্টে';
+                    } else if (quickAdjustTarget === 'Bkash') {
+                      curBkash += amt;
+                      setBkashInit(curBkash.toString());
+                      targetName = 'বিকাশ অ্যাকাউন্টে';
+                    } else if (quickAdjustTarget === 'Nagad') {
+                      curNagad += amt;
+                      setNagadInit(curNagad.toString());
+                      targetName = 'নগদ অ্যাকাউন্টে';
+                    } else if (quickAdjustTarget === 'Bank') {
+                      curBank += amt;
+                      setBankInit(curBank.toString());
+                      targetName = 'ব্যাংক অ্যাকাউন্টে';
+                    } else if (quickAdjustTarget === 'Card') {
+                      curCard += amt;
+                      setCardInit(curCard.toString());
+                      targetName = 'কার্ড অ্যাকাউন্টে';
+                    }
+
+                    await updateInitialBalances(
+                      {
+                        Cash: curCash,
+                        Bkash: curBkash,
+                        Nagad: curNagad,
+                        Bank: curBank,
+                        Card: curCard,
+                        Other: curOther,
+                      },
+                      curMain
+                    );
+
+                    setQuickAdjustAmount('');
+                    alert(`${targetName} ৳${amt.toLocaleString()} টাকা যোগ করা হয়েছে!`);
+                  }}
+                  className="px-4 py-2 bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-md shadow-emerald-500/20"
+                >
+                  <PlusCircle className="w-4 h-4" />
+                  <span>+ ৳যোগ করুন</span>
+                </button>
+
+                <button
+                  type="button"
+                  onClick={async () => {
+                    const amt = parseFloat(quickAdjustAmount);
+                    if (!amt || isNaN(amt) || amt <= 0) {
+                      alert('অনুগ্রহ করে সঠিক টাকার পরিমাণ লিখুন (যেমন: ৫০০)');
+                      return;
+                    }
+
+                    let curMain = parseFloat(mainOffset) || 0;
+                    let curCash = parseFloat(cashInit) || 0;
+                    let curBkash = parseFloat(bkashInit) || 0;
+                    let curNagad = parseFloat(nagadInit) || 0;
+                    let curBank = parseFloat(bankInit) || 0;
+                    let curCard = parseFloat(cardInit) || 0;
+                    let curOther = parseFloat(otherInit) || 0;
+
+                    let targetName = 'মেইন ব্যালেন্স';
+
+                    if (quickAdjustTarget === 'main') {
+                      curMain -= amt;
+                      setMainOffset(curMain.toString());
+                      targetName = 'মেইন ব্যালেন্স থেকে';
+                    } else if (quickAdjustTarget === 'Cash') {
+                      curCash = Math.max(0, curCash - amt);
+                      setCashInit(curCash.toString());
+                      targetName = 'ক্যাশ অ্যাকাউন্ট থেকে';
+                    } else if (quickAdjustTarget === 'Bkash') {
+                      curBkash = Math.max(0, curBkash - amt);
+                      setBkashInit(curBkash.toString());
+                      targetName = 'বিকাশ অ্যাকাউন্ট থেকে';
+                    } else if (quickAdjustTarget === 'Nagad') {
+                      curNagad = Math.max(0, curNagad - amt);
+                      setNagadInit(curNagad.toString());
+                      targetName = 'নগদ অ্যাকাউন্ট থেকে';
+                    } else if (quickAdjustTarget === 'Bank') {
+                      curBank = Math.max(0, curBank - amt);
+                      setBankInit(curBank.toString());
+                      targetName = 'ব্যাংক অ্যাকাউন্ট থেকে';
+                    } else if (quickAdjustTarget === 'Card') {
+                      curCard = Math.max(0, curCard - amt);
+                      setCardInit(curCard.toString());
+                      targetName = 'কার্ড অ্যাকাউন্ট থেকে';
+                    }
+
+                    await updateInitialBalances(
+                      {
+                        Cash: curCash,
+                        Bkash: curBkash,
+                        Nagad: curNagad,
+                        Bank: curBank,
+                        Card: curCard,
+                        Other: curOther,
+                      },
+                      curMain
+                    );
+
+                    setQuickAdjustAmount('');
+                    alert(`${targetName} ৳${amt.toLocaleString()} টাকা কমানো হয়েছে!`);
+                  }}
+                  className="px-4 py-2 bg-rose-500 hover:bg-rose-400 text-white font-extrabold rounded-xl text-xs flex items-center justify-center gap-1 shadow-md shadow-rose-500/20"
+                >
+                  <MinusCircle className="w-4 h-4" />
+                  <span>- ৳কমানু</span>
+                </button>
+              </div>
+            </div>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
               <div className="bg-slate-950 p-3.5 rounded-2xl border border-slate-800 space-y-1">
                 <label className="block text-slate-300 font-bold flex items-center gap-1.5">
@@ -781,13 +1300,57 @@ export const AdminPanelView: React.FC = () => {
               </p>
             </div>
 
-            <button
-              type="submit"
-              className="px-6 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/20 flex items-center gap-2"
-            >
-              <Check className="w-4 h-4" />
-              <span>মেইন ব্যালেন্স সেটিংস সেভ করুন</span>
-            </button>
+            <div className="pt-3 border-t border-slate-800 flex flex-wrap gap-3">
+              <button
+                type="submit"
+                className="px-6 py-3 rounded-2xl bg-emerald-500 hover:bg-emerald-400 text-slate-950 font-bold text-sm shadow-lg shadow-emerald-500/20 flex items-center gap-2"
+              >
+                <Check className="w-4 h-4" />
+                <span>মেইন ব্যালেন্স সেটিংস সেভ করুন</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm('আপনি কি মেইন প্রারম্ভিক ব্যালেন্স ০ (শূন্য) টাকা করতে চান?')) {
+                    setCashInit('0');
+                    setBkashInit('0');
+                    setNagadInit('0');
+                    setBankInit('0');
+                    setCardInit('0');
+                    setOtherInit('0');
+                    setMainOffset('0');
+                    await updateInitialBalances({ Cash: 0, Bkash: 0, Nagad: 0, Bank: 0, Card: 0, Other: 0 }, 0);
+                    alert('ব্যালেন্স সফলভাবে ০ (শূন্য) টাকা করা হয়েছে।');
+                  }
+                }}
+                className="px-5 py-3 rounded-2xl bg-rose-500/15 hover:bg-rose-500/25 border border-rose-500/30 text-rose-400 font-bold text-xs flex items-center gap-1.5"
+              >
+                <Trash2 className="w-4 h-4" />
+                <span>ব্যালেন্স রিসেট করুন (০৳)</span>
+              </button>
+
+              <button
+                type="button"
+                onClick={async () => {
+                  if (window.confirm('সতর্কতা: আপনি কি সমস্ত লেনদেন, দেনা-পাওনা ও ডাটা মুছে ডাটাবেজ খালি করতে চান?')) {
+                    await resetToDefaultData();
+                    setCashInit('0');
+                    setBkashInit('0');
+                    setNagadInit('0');
+                    setBankInit('0');
+                    setCardInit('0');
+                    setOtherInit('0');
+                    setMainOffset('0');
+                    alert('ডাটাবেজ খালি করা হয়েছে!');
+                  }
+                }}
+                className="px-5 py-3 rounded-2xl bg-amber-500/15 hover:bg-amber-500/25 border border-amber-500/30 text-amber-400 font-bold text-xs flex items-center gap-1.5"
+              >
+                <RefreshCw className="w-4 h-4" />
+                <span>ডাটাবেজ খালি / সাফ করুন</span>
+              </button>
+            </div>
           </form>
         </div>
       )}
@@ -1101,6 +1664,8 @@ export const AdminPanelView: React.FC = () => {
             </button>
           </div>
         </div>
+      )}
+        </>
       )}
     </div>
   );

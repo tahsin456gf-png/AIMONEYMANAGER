@@ -15,7 +15,7 @@ export const BottomNav: React.FC = () => {
   ];
 
   return (
-    <nav className={`fixed bottom-0 left-0 right-0 z-40 ${currentTheme.navBgClass} backdrop-blur-2xl border-t px-2 py-2 shadow-2xl transition-colors duration-300`}>
+    <nav className={`fixed bottom-0 left-0 right-0 z-40 no-print ${currentTheme.navBgClass} backdrop-blur-2xl border-t px-2 py-2 shadow-2xl transition-colors duration-300`}>
       <div className="max-w-md mx-auto flex items-center justify-around">
         {navItems.map((item) => {
           const Icon = item.icon;

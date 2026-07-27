@@ -20,6 +20,12 @@ import {
   Search,
   ChevronRight,
   Receipt,
+  Edit3,
+  Trash2,
+  RefreshCw,
+  X,
+  Check,
+  DollarSign,
 } from 'lucide-react';
 import { motion } from 'motion/react';
 
@@ -38,6 +44,9 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenAddModal, on
     adminSettings,
     setActiveTab,
     currentTheme,
+    deleteTransaction,
+    updateInitialBalances,
+    resetToDefaultData,
   } = useMoney();
 
   const todayStr = new Date().toISOString().split('T')[0];
@@ -629,7 +638,7 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenAddModal, on
         <h3 className="text-xs font-bold uppercase tracking-wider text-slate-400 px-1">
           কুইক অ্যাকশন (Quick Actions)
         </h3>
-        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2.5">
+        <div className="grid grid-cols-2 sm:grid-cols-6 gap-2.5">
           <button
             onClick={() => onOpenAddModal('income')}
             className="flex items-center gap-2.5 p-3 rounded-2xl bg-emerald-500/10 border border-emerald-500/20 hover:bg-emerald-500/20 text-emerald-400 transition-all font-semibold text-xs sm:text-sm group"
@@ -681,6 +690,19 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenAddModal, on
             <div className="text-left">
               <span className="block text-white font-bold text-xs sm:text-sm">AI Chat</span>
               <span className="text-[10px] text-blue-400/80 font-normal">এআই সহকারী</span>
+            </div>
+          </button>
+
+          <button
+            onClick={() => setActiveTab('accounts')}
+            className="flex items-center gap-2.5 p-3 rounded-2xl bg-amber-500/10 border border-amber-500/20 hover:bg-amber-500/20 text-amber-400 transition-all font-semibold text-xs sm:text-sm group"
+          >
+            <div className="p-2 rounded-xl bg-amber-500 text-slate-950 group-hover:scale-110 transition-transform">
+              <Wallet className="w-4 h-4 sm:w-5 sm:h-5" />
+            </div>
+            <div className="text-left">
+              <span className="block text-white font-bold text-xs sm:text-sm">Accounts</span>
+              <span className="text-[10px] text-amber-400/80 font-normal">অ্যাকাউন্টস</span>
             </div>
           </button>
 
@@ -767,53 +789,66 @@ export const DashboardView: React.FC<DashboardViewProps> = ({ onOpenAddModal, on
         </div>
 
         <div className="space-y-2">
-          {transactions.slice(0, 5).map((tx) => (
-            <div
-              key={tx.id}
-              className={`flex items-center justify-between p-3 rounded-2xl border ${
-                currentTheme.isLight ? 'bg-slate-50 border-slate-100' : 'bg-slate-950/40 border-slate-800/60'
-              } transition-all text-xs sm:text-sm`}
-            >
-              <div className="flex items-center gap-3">
-                <div
-                  className={`p-2.5 rounded-xl ${
-                    tx.type === 'income'
-                      ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
-                      : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
-                  }`}
-                >
-                  {tx.type === 'income' ? (
-                    <ArrowUpRight className="w-4 h-4" />
-                  ) : (
-                    <ArrowDownRight className="w-4 h-4" />
-                  )}
+          {transactions.slice(0, 5).map((tx) => {
+            const isInc = isIncomeType(tx.type);
+            return (
+              <div
+                key={tx.id}
+                className={`flex items-center justify-between p-3 rounded-2xl border ${
+                  currentTheme.isLight ? 'bg-slate-50 border-slate-100' : 'bg-slate-950/40 border-slate-800/60'
+                } transition-all text-xs sm:text-sm`}
+              >
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`p-2.5 rounded-xl ${
+                      isInc
+                        ? 'bg-emerald-500/10 text-emerald-500 border border-emerald-500/20'
+                        : 'bg-rose-500/10 text-rose-500 border border-rose-500/20'
+                    }`}
+                  >
+                    {isInc ? (
+                      <ArrowUpRight className="w-4 h-4" />
+                    ) : (
+                      <ArrowDownRight className="w-4 h-4" />
+                    )}
+                  </div>
+                  <div>
+                    <h4 className="font-bold">{tx.category}</h4>
+                    <p className="text-[11px] opacity-70">
+                      {tx.note || 'কোন নোট নেই'} • {tx.paymentMethod}
+                    </p>
+                  </div>
                 </div>
-                <div>
-                  <h4 className="font-bold">{tx.category}</h4>
-                  <p className="text-[11px] opacity-70">
-                    {tx.note || 'কোন নোট নেই'} • {tx.paymentMethod}
-                  </p>
-                </div>
-              </div>
 
-              <div className="text-right">
-                <span
-                  className={`font-black text-sm block ${
-                    tx.type === 'income' ? 'text-emerald-500' : 'text-rose-500'
-                  }`}
-                >
-                  {tx.type === 'income' ? '+' : '-'}৳{tx.amount.toLocaleString()}
-                </span>
-                <span className="text-[10px] opacity-60">{tx.date}</span>
+                <div className="flex items-center gap-3">
+                  <div className="text-right">
+                    <span
+                      className={`font-black text-sm block ${
+                        isInc ? 'text-emerald-500' : 'text-rose-500'
+                      }`}
+                    >
+                      {isInc ? '+' : '-'}৳{tx.amount.toLocaleString()}
+                    </span>
+                    <span className="text-[10px] opacity-60">{tx.date}</span>
+                  </div>
+                  <button
+                    onClick={() => deleteTransaction(tx.id)}
+                    className="p-1.5 text-slate-500 hover:text-rose-400 transition-colors rounded-lg hover:bg-rose-500/10"
+                    title="ডিলিট করুন"
+                  >
+                    <Trash2 className="w-4 h-4" />
+                  </button>
+                </div>
               </div>
-            </div>
-          ))}
+            );
+          })}
 
           {transactions.length === 0 && (
             <p className="text-center py-6 text-xs opacity-60">এখনও কোন লেনদেন রেকর্ড নেই</p>
           )}
         </div>
       </div>
+
     </div>
   );
 };

@@ -107,6 +107,7 @@ export interface AppUser {
   isApproved: boolean; // default true (অটো অনুমোদন)
   isBlocked?: boolean; // toggle user block/unblock state
   role: 'user' | 'admin';
+  referredBy?: string; // Phone number or ID of referring user
 }
 
 export interface SupportMessage {

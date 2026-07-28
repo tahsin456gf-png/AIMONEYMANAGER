@@ -552,6 +552,13 @@ export const AdminPanelView: React.FC = () => {
                         </span>
                       </div>
 
+                      {u.referredBy && (
+                        <div className="flex items-center justify-between text-indigo-300 text-[11px] pt-1 border-t border-slate-800/80">
+                          <span className="text-slate-400">রেফার করেছেন (Referred By):</span>
+                          <span className="font-mono font-bold bg-indigo-500/10 px-2 py-0.5 rounded border border-indigo-500/20">{u.referredBy}</span>
+                        </div>
+                      )}
+
                       <div className="flex items-center justify-between text-slate-400 text-[11px] pt-1.5 border-t border-slate-800/80">
                         <span>রেজিস্ট্রেশন তারিখ:</span>
                         <span>{new Date(u.createdAt || Date.now()).toLocaleDateString('bn-BD')}</span>

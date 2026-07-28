@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useMoney } from '../context/MoneyContext';
 import {
   UserCheck,
@@ -15,6 +15,7 @@ import {
   Database,
   Smartphone,
   Users,
+  Gift,
 } from 'lucide-react';
 
 export const AuthView: React.FC = () => {
@@ -28,10 +29,23 @@ export const AuthView: React.FC = () => {
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [adminPassword, setAdminPassword] = useState('');
+  const [referredByCode, setReferredByCode] = useState('');
 
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+
+  // Check URL query parameters for referral code on mount
+  useEffect(() => {
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const ref = searchParams.get('ref') || searchParams.get('referral');
+      if (ref) {
+        setReferredByCode(ref.trim());
+        setActiveTab('register'); // Auto switch to registration tab if opening via referral link
+      }
+    } catch (e) {}
+  }, []);
 
   const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -63,6 +77,7 @@ export const AuthView: React.FC = () => {
         phone: cleanPhone,
         password: password.trim(),
         adminPassword: adminPassword.trim() || password.trim(),
+        referredBy: referredByCode.trim() || undefined,
       });
 
       if (res.success) {
@@ -265,6 +280,26 @@ export const AuthView: React.FC = () => {
               <p className="text-[10px] text-slate-400">
                 💡 এডমিন প্যানেলে প্রবেশ করার সময় এই পাসওয়ার্ডটি ব্যবহার করবেন।
               </p>
+            </div>
+
+            <div className="space-y-1">
+              <label className="text-xs font-bold text-indigo-400 flex items-center gap-1.5">
+                <Gift className="w-3.5 h-3.5 text-indigo-400" />
+                <span>রেফারেল আইডি / ফোন নম্বর (Referral Code - Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={referredByCode}
+                onChange={(e) => setReferredByCode(e.target.value)}
+                placeholder="যেমন: 01700000001 (অপশনাল)"
+                className="w-full bg-slate-950 border border-indigo-500/30 rounded-xl px-3.5 py-2.5 text-xs text-white focus:outline-none focus:border-indigo-400 transition-all font-mono placeholder:text-slate-600"
+              />
+              {referredByCode && (
+                <p className="text-[11px] text-emerald-400 font-bold flex items-center gap-1 mt-1">
+                  <span>🎁 আপনাকে রেফার করেছেন:</span>
+                  <span className="font-mono bg-emerald-500/10 px-1.5 py-0.5 rounded border border-emerald-500/20">{referredByCode}</span>
+                </p>
+              )}
             </div>
 
             <button

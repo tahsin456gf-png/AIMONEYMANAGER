@@ -58,7 +58,7 @@ interface MoneyContextType {
   currentUser: AppUser | null;
   allUsers: AppUser[];
   supportMessages: SupportMessage[];
-  registerUser: (data: { name: string; phone: string; password?: string; adminPassword?: string }) => Promise<{ success: boolean; message?: string }>;
+  registerUser: (data: { name: string; phone: string; password?: string; adminPassword?: string; referredBy?: string }) => Promise<{ success: boolean; message?: string }>;
   loginUser: (credentials: { phone: string; password?: string }) => Promise<{ success: boolean; message?: string }>;
   logoutUser: () => Promise<void>;
   switchDemoAccount: (phone: string, name: string) => Promise<void>;
@@ -179,8 +179,14 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [isPinUnlocked, setIsPinUnlocked] = useState<boolean>(true);
   const [isLoadingFirebase, setIsLoadingFirebase] = useState<boolean>(true);
 
-  // Global Multi-User and Support State
-  const [allUsers, setAllUsers] = useState<AppUser[]>([]);
+  // Global Multi-User and Support State - Loaded with Local Cache + Firestore Live Sync
+  const [allUsers, setAllUsers] = useState<AppUser[]>(() => {
+    try {
+      const saved = localStorage.getItem('ai_money_all_users');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return [DEFAULT_USER];
+  });
   const [supportMessages, setSupportMessages] = useState<SupportMessage[]>([]);
 
   // Firestore Collections State (Strictly isolated per user ID!)
@@ -263,62 +269,61 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [currentUser]);
 
-  // High-performance Realtime Listeners for Users and Support Chat Messages
+  // High-performance Realtime Listeners for Registered Users and Support Messages
   useEffect(() => {
-    if (!currentUser) {
-      setAllUsers([]);
-      setSupportMessages([]);
-      return;
-    }
+    // Always subscribe to app_users collection in Firestore so Main Admin & all devices receive real-time registered users list
+    const unsubUsers = onSnapshot(
+      collection(db, 'app_users'),
+      (snapshot) => {
+        if (!snapshot.empty) {
+          const list = snapshot.docs.map((d) => d.data() as AppUser);
+          if (!list.some((u) => u.phone === '01700000001')) {
+            list.unshift(DEFAULT_USER);
+          }
+          setAllUsers(list);
+          try {
+            localStorage.setItem('ai_money_all_users', JSON.stringify(list));
+          } catch (e) {}
+        }
+      },
+      (err) => console.log('app_users listener error:', err)
+    );
 
-    const isAdmin = currentUser.role === 'admin' || currentUser.phone === '01700000001' || currentUser.phone === '01334003916';
-
-    let unsubUsers = () => {};
     let unsubSupport = () => {};
 
-    if (isAdmin) {
-      // Admins listen to all users & support messages across the platform
-      unsubUsers = onSnapshot(
-        collection(db, 'app_users'),
-        (snapshot) => {
-          if (!snapshot.empty) {
-            const list = snapshot.docs.map((d) => d.data() as AppUser);
-            setAllUsers(list);
-          }
-        },
-        (err) => console.log('app_users listener error:', err)
-      );
+    if (currentUser) {
+      const isAdmin = currentUser.role === 'admin' || currentUser.phone === '01700000001' || currentUser.phone === '01334003916';
 
-      unsubSupport = onSnapshot(
-        collection(db, 'support_messages'),
-        (snapshot) => {
-          if (!snapshot.empty) {
+      if (isAdmin) {
+        unsubSupport = onSnapshot(
+          collection(db, 'support_messages'),
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const list = snapshot.docs.map((d) => d.data() as SupportMessage);
+              list.sort((a, b) => a.timestamp - b.timestamp);
+              setSupportMessages(list);
+            }
+          },
+          (err) => console.log('support_messages listener error:', err)
+        );
+      } else {
+        const qSupport = query(
+          collection(db, 'support_messages'),
+          where('userId', '==', currentUser.id)
+        );
+
+        unsubSupport = onSnapshot(
+          qSupport,
+          (snapshot) => {
             const list = snapshot.docs.map((d) => d.data() as SupportMessage);
             list.sort((a, b) => a.timestamp - b.timestamp);
             setSupportMessages(list);
-          }
-        },
-        (err) => console.log('support_messages listener error:', err)
-      );
+          },
+          (err) => console.log('support_messages listener error:', err)
+        );
+      }
     } else {
-      // Regular user: include self in allUsers list
-      setAllUsers([currentUser]);
-
-      // Regular user: ONLY query support messages for this specific user ID
-      const qSupport = query(
-        collection(db, 'support_messages'),
-        where('userId', '==', currentUser.id)
-      );
-
-      unsubSupport = onSnapshot(
-        qSupport,
-        (snapshot) => {
-          const list = snapshot.docs.map((d) => d.data() as SupportMessage);
-          list.sort((a, b) => a.timestamp - b.timestamp);
-          setSupportMessages(list);
-        },
-        (err) => console.log('support_messages listener error:', err)
-      );
+      setSupportMessages([]);
     }
 
     return () => {
@@ -561,7 +566,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   }, [currentUser?.id]);
 
   // Auth Functions (Register with Auto-Approval, Login, Logout)
-  const registerUser = async (data: { name: string; phone: string; password?: string; adminPassword?: string }): Promise<{ success: boolean; message?: string }> => {
+  const registerUser = async (data: { name: string; phone: string; password?: string; adminPassword?: string; referredBy?: string }): Promise<{ success: boolean; message?: string }> => {
     const cleanPhone = data.phone.replace(/[^\d]/g, '');
     if (!cleanPhone) return { success: false, message: 'সঠিক মোবাইল নম্বর লিখুন!' };
 
@@ -583,10 +588,24 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         createdAt: Date.now(),
         isApproved: true, // Auto-approval required by user
         role: 'user',
+        ...(data.referredBy ? { referredBy: data.referredBy } : {}),
       };
 
       // Save user profile in Firestore
       await setDoc(userRef, newUser);
+
+      // Ensure default admin user is synced in Firestore
+      await setDoc(doc(db, 'app_users', '01700000001'), DEFAULT_USER, { merge: true }).catch(() => {});
+
+      // Update local storage cache and allUsers state immediately
+      setAllUsers((prev) => {
+        const filtered = prev.filter((u) => u.id !== cleanPhone);
+        const updated = [newUser, ...filtered];
+        try {
+          localStorage.setItem('ai_money_all_users', JSON.stringify(updated));
+        } catch (e) {}
+        return updated;
+      });
 
       // Auto login user
       setCurrentUser(newUser);
@@ -605,7 +624,16 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         createdAt: Date.now(),
         isApproved: true,
         role: 'user',
+        ...(data.referredBy ? { referredBy: data.referredBy } : {}),
       };
+      setAllUsers((prev) => {
+        const filtered = prev.filter((u) => u.id !== cleanPhone);
+        const updated = [newUser, ...filtered];
+        try {
+          localStorage.setItem('ai_money_all_users', JSON.stringify(updated));
+        } catch (err) {}
+        return updated;
+      });
       setCurrentUser(newUser);
       setActiveTab('home');
       return { success: true };

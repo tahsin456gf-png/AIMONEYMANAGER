@@ -22,6 +22,12 @@ import {
   Shield,
   Key,
   Save,
+  Share2,
+  Copy,
+  Check,
+  Gift,
+  Users,
+  MessageCircle,
 } from 'lucide-react';
 
 export const ProfileView: React.FC = () => {
@@ -34,6 +40,7 @@ export const ProfileView: React.FC = () => {
     currentTheme,
     currentUser,
     logoutUser,
+    allUsers,
   } = useMoney();
 
   const [pin, setPin] = useState(userProfile.pinCode);
@@ -43,6 +50,44 @@ export const ProfileView: React.FC = () => {
   const [newAdminPassword, setNewAdminPassword] = useState('');
   const [passMessage, setPassMessage] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
   const [isUpdatingPass, setIsUpdatingPass] = useState(false);
+
+  // Referral Link state
+  const [copiedLink, setCopiedLink] = useState(false);
+
+  const refCode = currentUser?.phone || userProfile.phone || '01700000001';
+  const baseUrl = typeof window !== 'undefined' ? `${window.location.origin}${window.location.pathname}` : '';
+  const referralUrl = `${baseUrl}?ref=${refCode}`;
+
+  const referredUsersList = allUsers.filter((u) => u.referredBy === refCode || u.referredBy === currentUser?.id);
+
+  const handleCopyLink = () => {
+    try {
+      navigator.clipboard.writeText(referralUrl);
+      setCopiedLink(true);
+      setTimeout(() => setCopiedLink(false), 3000);
+    } catch (e) {
+      alert(`আপনার রেফারেল লিংক: ${referralUrl}`);
+    }
+  };
+
+  const handleShareWhatsApp = () => {
+    const text = `🎉 AI Money Manager অ্যাপে জয়েন করুন! আপনার আয়-ব্যয়ের হিসাব রাখুন সহজে ও নিরাপদে।\n\nআমার রেফারেল লিংক ব্যবহার করে ফ্রিতে একাউন্ট করুন:\n${referralUrl}`;
+    window.open(`https://api.whatsapp.com/send?text=${encodeURIComponent(text)}`, '_blank');
+  };
+
+  const handleNativeShare = () => {
+    if (navigator.share) {
+      navigator
+        .share({
+          title: 'AI Money Manager - রেফারেল লিংক',
+          text: `AI Money Manager-এ জয়েন করুন আমার রেফারেল লিংক থেকে:`,
+          url: referralUrl,
+        })
+        .catch(() => {});
+    } else {
+      handleCopyLink();
+    }
+  };
 
   const handlePinSave = () => {
     updateUserProfile({ pinCode: pin });
@@ -189,7 +234,103 @@ export const ProfileView: React.FC = () => {
         </div>
       </div>
 
-      {/* 2. Password Change Section */}
+      {/* 2. Real Referral Link & Share Card */}
+      <div className="bg-slate-900/80 border border-indigo-500/30 p-5 rounded-3xl space-y-4 relative overflow-hidden shadow-xl shadow-indigo-500/5">
+        <div className="absolute top-0 right-0 -mr-6 -mt-6 w-24 h-24 bg-indigo-500/10 rounded-full blur-xl pointer-events-none" />
+
+        <div className="flex items-center justify-between border-b border-slate-800 pb-3">
+          <div className="flex items-center gap-2 text-white font-bold text-sm sm:text-base">
+            <Gift className="w-5 h-5 text-indigo-400" />
+            <h3>রেফারেল লিংক ও ইনভাইট (Referral & Share)</h3>
+          </div>
+          <span className="text-[10px] font-extrabold uppercase px-2 py-0.5 rounded-full bg-indigo-500/20 text-indigo-300 border border-indigo-500/30">
+            রেফারেল কোড: {refCode}
+          </span>
+        </div>
+
+        <p className="text-xs text-slate-300">
+          নিচের আপনার রিয়েল রেফারেল লিংকটি কপি করে বন্ধুদের সাথে শেয়ার করুন। এই লিংকে ক্লিক করে কেউ রেজিস্ট্রেশন করলে তিনি আপনার রেফারে যুক্ত হবেন!
+        </p>
+
+        {/* Copyable Referral URL Box */}
+        <div className="space-y-2">
+          <label className="block text-[11px] font-bold text-slate-400">আপনার ব্যক্তিগত রেফারেল লিংক (Referral Link):</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="text"
+              readOnly
+              value={referralUrl}
+              className="flex-1 bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-indigo-300 font-mono focus:outline-none select-all truncate"
+            />
+            <button
+              onClick={handleCopyLink}
+              className={`px-4 py-2.5 rounded-xl font-bold text-xs flex items-center gap-1.5 transition-all shrink-0 cursor-pointer ${
+                copiedLink
+                  ? 'bg-emerald-500 text-slate-950 shadow-md shadow-emerald-500/20'
+                  : 'bg-indigo-600 hover:bg-indigo-500 text-white shadow-md shadow-indigo-500/20'
+              }`}
+            >
+              {copiedLink ? (
+                <>
+                  <Check className="w-4 h-4" />
+                  <span>কপি হয়েছে!</span>
+                </>
+              ) : (
+                <>
+                  <Copy className="w-4 h-4" />
+                  <span>কপি করুন</span>
+                </>
+              )}
+            </button>
+          </div>
+        </div>
+
+        {/* Share Action Buttons */}
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-2.5 pt-1">
+          <button
+            onClick={handleShareWhatsApp}
+            className="py-2.5 px-4 bg-emerald-600/20 hover:bg-emerald-600/30 border border-emerald-500/40 text-emerald-300 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <MessageCircle className="w-4 h-4 text-emerald-400" />
+            <span>হোয়াটসঅ্যাপে শেয়ার করুন</span>
+          </button>
+
+          <button
+            onClick={handleNativeShare}
+            className="py-2.5 px-4 bg-sky-600/20 hover:bg-sky-600/30 border border-sky-500/40 text-sky-300 font-bold rounded-xl text-xs flex items-center justify-center gap-2 transition-all cursor-pointer"
+          >
+            <Share2 className="w-4 h-4 text-sky-400" />
+            <span>অন্যান্য সোশ্যাল মিডিয়ায় শেয়ার</span>
+          </button>
+        </div>
+
+        {/* Total Referred Users Counter */}
+        <div className="pt-3 border-t border-slate-800/80 flex items-center justify-between text-xs">
+          <div className="flex items-center gap-2 text-slate-400">
+            <Users className="w-4 h-4 text-amber-400" />
+            <span>আপনার লিংকে মোট আমন্ত্রিত ইউজার:</span>
+          </div>
+          <span className="font-mono font-bold text-amber-400 bg-amber-500/10 px-2.5 py-0.5 rounded-full border border-amber-500/20">
+            {referredUsersList.length} জন
+          </span>
+        </div>
+
+        {referredUsersList.length > 0 && (
+          <div className="space-y-1.5 pt-1">
+            <p className="text-[11px] font-bold text-slate-400">আমন্ত্রিত ইউজার তালিকা:</p>
+            <div className="max-h-32 overflow-y-auto space-y-1 pr-1">
+              {referredUsersList.map((u) => (
+                <div key={u.id} className="p-2 bg-slate-950/60 rounded-xl border border-slate-800/80 flex items-center justify-between text-[11px]">
+                  <span className="font-bold text-slate-200">{u.name}</span>
+                  <span className="font-mono text-slate-400">{u.phone}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* 3. Password Change Section */}
       <div className="bg-slate-900/80 border border-slate-800 p-5 rounded-3xl space-y-4">
         <div className="flex items-center gap-2 text-white font-bold text-sm sm:text-base border-b border-slate-800 pb-3">
           <KeyRound className="w-5 h-5 text-amber-400" />

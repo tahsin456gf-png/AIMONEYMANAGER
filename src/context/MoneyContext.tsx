@@ -269,32 +269,33 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [currentUser]);
 
-  // High-performance Realtime Listeners for Registered Users and Support Messages
+  // High-performance Realtime Listeners (Admins get app_users & all support messages, Users get only their own)
   useEffect(() => {
-    // Always subscribe to app_users collection in Firestore so Main Admin & all devices receive real-time registered users list
-    const unsubUsers = onSnapshot(
-      collection(db, 'app_users'),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const list = snapshot.docs.map((d) => d.data() as AppUser);
-          if (!list.some((u) => u.phone === '01700000001')) {
-            list.unshift(DEFAULT_USER);
-          }
-          setAllUsers(list);
-          try {
-            localStorage.setItem('ai_money_all_users', JSON.stringify(list));
-          } catch (e) {}
-        }
-      },
-      (err) => console.log('app_users listener error:', err)
-    );
-
+    let unsubUsers = () => {};
     let unsubSupport = () => {};
 
     if (currentUser) {
       const isAdmin = currentUser.role === 'admin' || currentUser.phone === '01700000001' || currentUser.phone === '01334003916';
 
       if (isAdmin) {
+        // ONLY Admins subscribe to the entire app_users collection to prevent network lag for regular users
+        unsubUsers = onSnapshot(
+          collection(db, 'app_users'),
+          (snapshot) => {
+            if (!snapshot.empty) {
+              const list = snapshot.docs.map((d) => d.data() as AppUser);
+              if (!list.some((u) => u.phone === '01700000001')) {
+                list.unshift(DEFAULT_USER);
+              }
+              setAllUsers(list);
+              try {
+                localStorage.setItem('ai_money_all_users', JSON.stringify(list));
+              } catch (e) {}
+            }
+          },
+          (err) => console.log('app_users listener error:', err)
+        );
+
         unsubSupport = onSnapshot(
           collection(db, 'support_messages'),
           (snapshot) => {
@@ -307,6 +308,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           (err) => console.log('support_messages listener error:', err)
         );
       } else {
+        // Regular users do not subscribe to thousands of app_users; keep allUsers lightweight
         const qSupport = query(
           collection(db, 'support_messages'),
           where('userId', '==', currentUser.id)
@@ -644,11 +646,35 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const cleanPhone = credentials.phone.replace(/[^\d]/g, '');
     if (!cleanPhone) return { success: false, message: 'সঠিক মোবাইল নম্বর প্রদান করুন!' };
 
+    // 1. Check local users cache for instant zero-lag verification
+    let cachedUser: AppUser | null = null;
     try {
-      const userRef = doc(db, 'app_users', cleanPhone);
-      const docSnap = await getDoc(userRef);
+      const localAllUsersStr = localStorage.getItem('ai_money_all_users');
+      if (localAllUsersStr) {
+        const parsed = JSON.parse(localAllUsersStr) as AppUser[];
+        cachedUser = parsed.find((u) => u.phone === cleanPhone || u.id === cleanPhone) || null;
+      }
+    } catch (e) {}
 
-      if (docSnap.exists()) {
+    // Special check for default admin
+    if (cleanPhone === '01700000001') {
+      if (credentials.password && credentials.password !== '1234' && credentials.password !== 'mdtanvir3600') {
+        return { success: false, message: 'পাসওয়ার্ড সঠিক নয়!' };
+      }
+      setCurrentUser(DEFAULT_USER);
+      setActiveTab('home');
+      return { success: true };
+    }
+
+    try {
+      // 2. Fetch doc with a 1.8s timeout so high traffic never causes infinite loading
+      const userRef = doc(db, 'app_users', cleanPhone);
+      const docSnap = await Promise.race([
+        getDoc(userRef),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+      ]);
+
+      if (docSnap && docSnap.exists()) {
         const userData = docSnap.data() as AppUser;
 
         if (userData.isBlocked) {
@@ -661,25 +687,38 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         setCurrentUser(userData);
         setActiveTab('home');
         return { success: true };
-      } else {
-        // Auto-create account if logging in for first time
-        const autoUser: AppUser = {
-          id: cleanPhone,
-          name: `ইউজার (${cleanPhone.slice(-4)})`,
-          phone: cleanPhone,
-          password: credentials.password || '',
-          createdAt: Date.now(),
-          isApproved: true,
-          role: 'user',
-        };
-        await setDoc(userRef, autoUser).catch(() => {});
-        setCurrentUser(autoUser);
+      }
+
+      // If network timed out but we have a cached user locally
+      if (cachedUser) {
+        if (cachedUser.isBlocked) {
+          return { success: false, message: 'আপনার অ্যাকাউন্টটি ব্লক করা রয়েছে!' };
+        }
+        if (cachedUser.password && credentials.password && cachedUser.password !== credentials.password) {
+          return { success: false, message: 'পাসওয়ার্ড সঠিক নয়!' };
+        }
+        setCurrentUser(cachedUser);
         setActiveTab('home');
         return { success: true };
       }
+
+      // Auto-create account if logging in for first time
+      const autoUser: AppUser = {
+        id: cleanPhone,
+        name: `ইউজার (${cleanPhone.slice(-4)})`,
+        phone: cleanPhone,
+        password: credentials.password || '',
+        createdAt: Date.now(),
+        isApproved: true,
+        role: 'user',
+      };
+      setDoc(userRef, autoUser).catch(() => {});
+      setCurrentUser(autoUser);
+      setActiveTab('home');
+      return { success: true };
     } catch (e) {
       // Local login fallback
-      const fallbackUser: AppUser = {
+      const fallbackUser: AppUser = cachedUser || {
         id: cleanPhone,
         name: `ইউজার (${cleanPhone.slice(-4)})`,
         phone: cleanPhone,

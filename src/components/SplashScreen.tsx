@@ -10,7 +10,7 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onDismiss }) => {
   useEffect(() => {
     const timer = setTimeout(() => {
       onDismiss();
-    }, 2400);
+    }, 800);
     return () => clearTimeout(timer);
   }, [onDismiss]);
 
@@ -19,7 +19,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onDismiss }) => {
       initial={{ opacity: 0 }}
       animate={{ opacity: 1 }}
       exit={{ opacity: 0 }}
-      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white p-6"
+      onClick={onDismiss}
+      className="fixed inset-0 z-50 flex flex-col items-center justify-center bg-gradient-to-br from-slate-950 via-slate-900 to-indigo-950 text-white p-6 cursor-pointer select-none"
     >
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_top_right,rgba(59,130,246,0.15),transparent_50%)] pointer-events-none" />
       <div className="absolute inset-0 bg-[radial-gradient(circle_at_bottom_left,rgba(16,185,129,0.15),transparent_50%)] pointer-events-none" />
@@ -66,7 +67,8 @@ export const SplashScreen: React.FC<SplashScreenProps> = ({ onDismiss }) => {
         <span>Gemini AI Powred • Offline & Encrypted Data</span>
       </motion.div>
 
-      <div className="absolute bottom-10 left-0 right-0 flex justify-center">
+      <div className="absolute bottom-8 left-0 right-0 flex flex-col items-center justify-center gap-2">
+        <span className="text-[11px] text-slate-400 font-medium animate-pulse">যেখানে ইচ্ছা ট্যাপ করে সরাসরি অ্যাপে যান ⚡</span>
         <div className="flex gap-1.5">
           <div className="w-2 h-2 rounded-full bg-blue-500 animate-bounce" style={{ animationDelay: '0ms' }} />
           <div className="w-2 h-2 rounded-full bg-emerald-500 animate-bounce" style={{ animationDelay: '150ms' }} />

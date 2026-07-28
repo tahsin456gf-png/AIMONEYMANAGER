@@ -20,7 +20,7 @@ import {
 export const AuthView: React.FC = () => {
   const { loginUser, registerUser, switchDemoAccount, currentTheme } = useMoney();
 
-  const [activeTab, setActiveTab] = useState<'login' | 'register'>('register');
+  const [activeTab, setActiveTab] = useState<'login' | 'register'>('login');
 
   // Form fields
   const [name, setName] = useState('');

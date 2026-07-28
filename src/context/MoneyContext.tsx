@@ -170,16 +170,10 @@ const DEFAULT_USER: AppUser = {
 };
 
 export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Active Logged User State
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
-    try {
-      const saved = localStorage.getItem('ai_money_active_user');
-      if (saved) return JSON.parse(saved);
-    } catch (e) {}
-    return null;
-  });
+  // Active Logged User State - Always require login when opening app or URL
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
 
-  const [activeTab, setActiveTab] = useState<string>('home');
+  const [activeTab, setActiveTab] = useState<string>('auth');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSplashActive, setIsSplashActive] = useState<boolean>(true);
   const [isPinUnlocked, setIsPinUnlocked] = useState<boolean>(true);

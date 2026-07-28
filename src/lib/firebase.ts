@@ -18,5 +18,5 @@ const app = getApps().length === 0 ? initializeApp(firebaseConfig) : getApp();
 const databaseId = metaEnv.VITE_FIREBASE_DATABASE_ID || firebaseConfigData?.firestoreDatabaseId;
 
 export const db = databaseId
-  ? initializeFirestore(app, {}, databaseId)
-  : getFirestore(app);
+  ? initializeFirestore(app, { experimentalAutoDetectLongPolling: true }, databaseId)
+  : initializeFirestore(app, { experimentalAutoDetectLongPolling: true });

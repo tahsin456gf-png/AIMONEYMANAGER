@@ -170,10 +170,36 @@ const DEFAULT_USER: AppUser = {
 };
 
 export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-  // Active Logged User State - Always require login when opening app or URL
-  const [currentUser, setCurrentUser] = useState<AppUser | null>(null);
+  // Persistent Logged User Session across app launches for zero-lag instant opening
+  const [currentUser, setCurrentUser] = useState<AppUser | null>(() => {
+    try {
+      const saved = localStorage.getItem('ai_money_active_user');
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed && parsed.id && parsed.phone) return parsed;
+      }
+    } catch (e) {}
+    return null;
+  });
 
-  const [activeTab, setActiveTab] = useState<string>('auth');
+  const [activeTab, setActiveTab] = useState<string>(() => {
+    try {
+      const saved = localStorage.getItem('ai_money_active_user');
+      if (saved) return 'home';
+    } catch (e) {}
+    return 'auth';
+  });
+
+  // Sync active user to local storage whenever state changes
+  useEffect(() => {
+    if (currentUser) {
+      try {
+        localStorage.setItem('ai_money_active_user', JSON.stringify(currentUser));
+      } catch (e) {}
+    } else {
+      localStorage.removeItem('ai_money_active_user');
+    }
+  }, [currentUser]);
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [isSplashActive, setIsSplashActive] = useState<boolean>(true);
   const [isPinUnlocked, setIsPinUnlocked] = useState<boolean>(true);
@@ -666,12 +692,42 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       return { success: true };
     }
 
+    // 2. Fast-Path: If user is cached locally, log in instantly without waiting for network
+    if (cachedUser) {
+      if (cachedUser.isBlocked) {
+        return { success: false, message: 'আপনার অ্যাকাউন্টটি ব্লক করা রয়েছে! সহায়তার জন্য মেইন এডমিনের সাথে যোগাযোগ করুন।' };
+      }
+      if (cachedUser.password && credentials.password && cachedUser.password !== credentials.password) {
+        return { success: false, message: 'পাসওয়ার্ড সঠিক নয়!' };
+      }
+      setCurrentUser(cachedUser);
+      setActiveTab('home');
+
+      // Async background check with Firestore (non-blocking)
+      getDoc(doc(db, 'app_users', cleanPhone))
+        .then((docSnap) => {
+          if (docSnap.exists()) {
+            const freshUser = docSnap.data() as AppUser;
+            if (freshUser.isBlocked) {
+              setCurrentUser(null);
+              setActiveTab('auth');
+              localStorage.removeItem('ai_money_active_user');
+            } else {
+              setCurrentUser(freshUser);
+            }
+          }
+        })
+        .catch(() => {});
+
+      return { success: true };
+    }
+
+    // 3. Network path for new device/uncached user with 1.5s timeout
     try {
-      // 2. Fetch doc with a 1.8s timeout so high traffic never causes infinite loading
       const userRef = doc(db, 'app_users', cleanPhone);
       const docSnap = await Promise.race([
         getDoc(userRef),
-        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1800)),
+        new Promise<null>((resolve) => setTimeout(() => resolve(null), 1500)),
       ]);
 
       if (docSnap && docSnap.exists()) {
@@ -689,19 +745,6 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         return { success: true };
       }
 
-      // If network timed out but we have a cached user locally
-      if (cachedUser) {
-        if (cachedUser.isBlocked) {
-          return { success: false, message: 'আপনার অ্যাকাউন্টটি ব্লক করা রয়েছে!' };
-        }
-        if (cachedUser.password && credentials.password && cachedUser.password !== credentials.password) {
-          return { success: false, message: 'পাসওয়ার্ড সঠিক নয়!' };
-        }
-        setCurrentUser(cachedUser);
-        setActiveTab('home');
-        return { success: true };
-      }
-
       // Auto-create account if logging in for first time
       const autoUser: AppUser = {
         id: cleanPhone,
@@ -712,16 +755,17 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         isApproved: true,
         role: 'user',
       };
-      setDoc(userRef, autoUser).catch(() => {});
+      setDoc(userRef, autoUser, { merge: true }).catch(() => {});
       setCurrentUser(autoUser);
       setActiveTab('home');
       return { success: true };
     } catch (e) {
       // Local login fallback
-      const fallbackUser: AppUser = cachedUser || {
+      const fallbackUser: AppUser = {
         id: cleanPhone,
         name: `ইউজার (${cleanPhone.slice(-4)})`,
         phone: cleanPhone,
+        password: credentials.password || '',
         createdAt: Date.now(),
         isApproved: true,
         role: 'user',

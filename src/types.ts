@@ -105,6 +105,7 @@ export interface AppUser {
   adminPassword?: string; // User-customized admin panel password
   createdAt: number;
   isApproved: boolean; // default true (অটো অনুমোদন)
+  isBlocked?: boolean; // toggle user block/unblock state
   role: 'user' | 'admin';
 }
 

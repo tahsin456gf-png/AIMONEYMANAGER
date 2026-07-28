@@ -30,6 +30,7 @@ export const DEFAULT_PAYMENT_METHODS: AccountMethod[] = [
 ];
 
 export const DEFAULT_INCOME_CATEGORIES: Category[] = [
+  { id: 'inc_bazar', name: 'Market Income', nameBn: '🛒 বাজার', type: 'income', icon: 'ShoppingCart', color: '#10B981' },
   { id: 'inc_salary', name: 'Salary', nameBn: 'বেতন', type: 'income', icon: 'Briefcase', color: '#10B981' },
   { id: 'inc_business', name: 'Business', nameBn: 'ব্যবসা', type: 'income', icon: 'Building2', color: '#059669' },
   { id: 'inc_bonus', name: 'Bonus', nameBn: 'বোনাস', type: 'income', icon: 'Gift', color: '#3B82F6' },

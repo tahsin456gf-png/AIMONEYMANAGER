@@ -1,4 +1,5 @@
 import { GoogleGenAI, Type } from '@google/genai';
+import { DEFAULT_INCOME_CATEGORIES, DEFAULT_EXPENSE_CATEGORIES } from '../constants';
 
 // Utility to convert English numerals to Bengali numerals
 export function toBnDigits(val: number | string | undefined | null): string {
@@ -307,10 +308,12 @@ function matchCategoryFromList(
   categoryList: any[] = [],
   type: 'income' | 'expense'
 ): string {
+  const defaults = type === 'income' ? DEFAULT_INCOME_CATEGORIES : DEFAULT_EXPENSE_CATEGORIES;
+  const fullList = [...(categoryList || []), ...defaults];
   const lowerPrompt = prompt.toLowerCase();
 
   const cleanStr = (s: string) =>
-    s ? s.replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '').replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '').trim().toLowerCase() : '';
+    s ? s.replace(/[\p{Extended_Pictographic}\p{Emoji}]/gu, '').replace(/(আয়|আয়|ব্যয়|ব্যায়|খরচ)/gi, '').replace(/[^\u0980-\u09FFa-zA-Z0-9]/g, '').trim().toLowerCase() : '';
 
   const getCatName = (c: any): string => (typeof c === 'string' ? c : c.nameBn || c.name || '');
 
@@ -318,15 +321,15 @@ function matchCategoryFromList(
   const findExisting = (query: string) => {
     const cleanQ = cleanStr(query);
     if (!cleanQ || cleanQ.length < 2) return null;
-    return categoryList.find((c) => {
+    return fullList.find((c) => {
       const name = getCatName(c);
       const cleanName = cleanStr(name);
       return cleanName === cleanQ || cleanName.includes(cleanQ) || cleanQ.includes(cleanName);
     });
   };
 
-  // 1. Search existing categories first (Admin or User pre-defined)
-  for (const cat of categoryList) {
+  // 1. Search existing categories first (Admin, User pre-defined, or default)
+  for (const cat of fullList) {
     if (!cat) continue;
     const catNameBn = getCatName(cat);
     const cleanBn = cleanStr(catNameBn);
@@ -336,7 +339,7 @@ function matchCategoryFromList(
         return catNameBn;
       }
       // Check inflection root matching (e.g., "দোকান" matches "দোকানে", "দোকানের", "দোকান থেকে")
-      const rootRegex = new RegExp(`${cleanBn}(ে|িতে|ের|ে\\s*আয়|ে\\s*খরচ|ে\\s*থেকে|ের\\s*থেকে)?`, 'i');
+      const rootRegex = new RegExp(`${cleanBn}(ে|িতে|ের|ে\\s*আয়|ে\\s*ব্যয়|ে\\s*থেকে|ের\\s*থেকে)?`, 'i');
       if (rootRegex.test(lowerPrompt)) {
         return catNameBn;
       }
@@ -538,28 +541,7 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     }
   }
 
-  // B. Check for Summary / Overall Financial Status Request
-  if (/সামারি|রিপোর্ট|বর্তমান আর্থিক|সার্বিক|অবস্থা কেমন|হিসাব দাও|পোর্টফোলিও|ব্যালেন্স কত|মোট কত আয় ব্যয় হলো|মোট আয় ব্যয়/i.test(rawPrompt) || (!extractedAmount && /হিসাব|ব্যালেন্স|সামারি/i.test(rawPrompt))) {
-    const aiReplyMessage = computeWalletBreakdown(ctx, { intent: 'SUMMARY' });
-    return {
-      intent: 'SUMMARY',
-      aiReplyMessage,
-    };
-  }
-
-  // C. Check for Casual Greeting / Conversation
-  if (/কেমন আছ|কেমন আছেন|কেমন আছো|হাই|হ্যালো|কথা বল|কথা বলো|শোনো|কে তুমি/i.test(rawPrompt) && !extractedAmount) {
-    let reply = 'আমি আলহামদুলিল্লাহ ভালো আছি, বন্ধু! 🤖\nআপনার আজকের হিসাব বা কোনো প্রশ্ন থাকলে বলতে পারেন, আমি সঙ্গে সঙ্গে সব খাতা ও ফায়ারস্টোর ডাটাবেজে আপডেট করে দেব!';
-    if (/কথা বল|কথা বলো/i.test(rawPrompt)) {
-      reply = 'হ্যাঁ বন্ধু! 🫡 আমি আপনার স্বাধীন এআই মানি ম্যানেজার।\nআজকে বাজারে বা কোথায় কত টাকা খরচ কিংবা আয় হয়েছে বলুন, আমি ক্যাটাগরি খুঁজে বের করে সরাসরি আপনার ব্যালেন্স ও সাম্প্রতিক হিসাব আপডেট করে দিচ্ছি!';
-    }
-    return {
-      intent: 'GREETING',
-      aiReplyMessage: reply,
-    };
-  }
-
-  // D. Check for PAWNA (Lent Money)
+  // B. Check for PAWNA (Lent Money)
   if (/ধার দিলাম|ধারে দিলাম|ধার দিয়েছি|পাবো|পাওনা/i.test(rawPrompt) && extractedAmount) {
     const nameMatch = rawPrompt.match(/([অ-য়a-zA-Z]+)(কে|রে|\s+কে|\s+রে)/i);
     const personName = nameMatch ? nameMatch[1] : 'পরিচিত';
@@ -593,7 +575,7 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // E. Check for DENA (Borrowed Money)
+  // C. Check for DENA (Borrowed Money)
   if (/ধার নিলাম|ধার নিয়েছি|ধার পেলাম|দেনা|ঋণ/i.test(rawPrompt) && extractedAmount) {
     const nameMatch = rawPrompt.match(/([অ-য়a-zA-Z]+)(কাছ থেকে|র কাছ থেকে|থেকে|র থেকে)/i);
     const personName = nameMatch ? nameMatch[1] : 'পরিচিত';
@@ -627,14 +609,13 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // F. Explicit intent classification
+  // D. Explicit intent classification for INCOME & EXPENSE
   const hasIncomeKeyword = /আয়|ইনকাম|জমা|লাভ|পেলাম|উপহার পেলাম|বোনাস|স্যালারি|বেতন|জমা হয়েছে|জমা হলো/i.test(rawPrompt) && !/আয় থেকে খরচ|আয়ের চেয়ে/i.test(rawPrompt);
   const hasExpenseKeyword = /ব্যয়|ব্যায়|খরচ|কিনলাম|কিনছি|দিলাম|দিছি|খেলাম|ভাড়া|বিল|রিকশা|গাড়ি|দান|এমবি|নাস্তা|চা|যাতায়াত|পাঠালাম|গেছে|গেলো|কেনাকাটা|মেস|পার্লার|শপিং|ফি/i.test(rawPrompt);
 
   const isExplicitIncome = hasIncomeKeyword;
   const isExplicitExpense = !hasIncomeKeyword && (hasExpenseKeyword || /বাজার/i.test(rawPrompt));
 
-  // F. Check for INCOME
   if (isExplicitIncome && extractedAmount) {
     const category = matchCategoryFromList(rawPrompt, ctx.categories?.income, 'income');
 
@@ -671,9 +652,8 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
-  // G. Check for EXPENSE
-  if (extractedAmount || isExplicitExpense) {
-    const amt = extractedAmount || 100;
+  if (extractedAmount && (isExplicitExpense || /কিশে|বিকাশ|নগদ|টাকা|ভাড়া|চা|বাজার|মোবাইল|এমবি/i.test(rawPrompt))) {
+    const amt = extractedAmount;
     const category = matchCategoryFromList(rawPrompt, ctx.categories?.expense, 'expense');
 
     const aiReplyMessage = computeWalletBreakdown(ctx, {
@@ -709,6 +689,172 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
     };
   }
 
+  // E. Mathematical Calculations / Calculator Expression
+  const mathPromptEn = convertBnToEnDigits(rawPrompt);
+  const percentageMatch = mathPromptEn.match(/(\d+(?:\.\d+)?)\s*(?:টাকার|এর|of)?\s*(\d+(?:\.\d+)?)\s*(?:%|পার্সেন্ট|পারসেন্ট)/i) ||
+                          mathPromptEn.match(/(\d+(?:\.\d+)?)\s*(?:%|পার্সেন্ট|পারসেন্ট)\s*(?:of|এর|টাকার)?\s*(\d+(?:\.\d+)?)/i);
+  
+  const isExplicitMath = /ক্যালকুলেটর|গাণিতিক|হিসাব করো|যোগ|বিয়োগ|গুণ|ভাগ|পার্সেন্ট|পারসেন্ট/i.test(rawPrompt);
+  const mathOpMatch = mathPromptEn.match(/(\d+(?:\.\d+)?)\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?)(?:\s*([\+\-\*\/])\s*(\d+(?:\.\d+)?))?/);
+
+  if ((percentageMatch || mathOpMatch || isExplicitMath) && !/আয়|ইনকাম|বেতন|বাজার|বিকাশ|নগদ|ধার|রিসিপ্ট/i.test(rawPrompt)) {
+    try {
+      let exprStr = '';
+      let calculatedVal = 0;
+
+      if (percentageMatch) {
+        const num1 = parseFloat(percentageMatch[1]);
+        const num2 = parseFloat(percentageMatch[2]);
+        if (rawPrompt.includes('%') || /পার্সেন্ট|পারসেন্ট/i.test(rawPrompt)) {
+          if (mathPromptEn.indexOf('%') > mathPromptEn.indexOf(percentageMatch[1]) || rawPrompt.indexOf('এর') !== -1 || rawPrompt.indexOf('টাকার') !== -1) {
+            calculatedVal = (num1 * num2) / 100;
+            exprStr = `${toBnDigits(num1)} টাকার ${toBnDigits(num2)}%`;
+          } else {
+            calculatedVal = (num2 * num1) / 100;
+            exprStr = `${toBnDigits(num2)} টাকার ${toBnDigits(num1)}%`;
+          }
+        }
+      } else if (mathOpMatch) {
+        const cleanedExpr = mathOpMatch[0];
+        calculatedVal = Function(`"use strict"; return (${cleanedExpr})`)();
+        exprStr = cleanedExpr.replace(/\+/g, ' + ').replace(/\-/g, ' - ').replace(/\*/g, ' × ').replace(/\//g, ' ÷ ');
+        exprStr = convertBnToEnDigits(exprStr).replace(/[0-9.]+/g, (m) => toBnDigits(m));
+      }
+
+      if (exprStr && !isNaN(calculatedVal)) {
+        const reply = `🤖 AI Math Calculator 🧮
+        
+গাণিতিক হিসাবের ফলাফল:
+
+• 📐 হিসাবের রাশি: ${exprStr}
+• 🎯 সমান সমান: ৳${toBnDigits(calculatedVal)}
+
+💡 টিপস: আপনি যেকোনো গাণিতিক যোগ, বিয়োগ, গুণ, ভাগ বা পার্সেন্ট হিসাব চাইলে আমাকে সরাসরি লিখতে পারেন!`;
+
+        return {
+          intent: 'MATH_CALCULATION',
+          aiReplyMessage: reply,
+        };
+      }
+    } catch (e) {
+      // Fall through if math parsing fails
+    }
+  }
+
+  // F. Financial Advice & Overspending Warning Engine
+  if (/পরামর্শ|উপদেশ|কি করব|কী করব|কী করবো|কি করবো|কীভাবে ভালো রাখা যায়|অতিরিক্ত খরচ|খরচ বেশি|সঞ্চয় করার উপায়|আয় ব্যয়ের পরামর্শ|আর্থিক অবস্থা|পরামর্শ দাও/i.test(rawPrompt)) {
+    let totalIncome = 0;
+    let totalExpense = 0;
+    const catExpenses: Record<string, number> = {};
+
+    (ctx.transactions || []).forEach((t: any) => {
+      const amt = Math.abs(Number(t.amount) || 0);
+      const txType = (t.type || '').toString().toLowerCase();
+      if (txType === 'income' || txType.includes('আয়')) {
+        totalIncome += amt;
+      } else {
+        totalExpense += amt;
+        const cat = t.category || 'অন্যান্য';
+        catExpenses[cat] = (catExpenses[cat] || 0) + amt;
+      }
+    });
+
+    const netBalance = totalIncome - totalExpense;
+    const expenseRatio = totalIncome > 0 ? (totalExpense / totalIncome) * 100 : 100;
+
+    let topCat = 'কোনো খরচ নেই';
+    let topCatAmt = 0;
+    Object.keys(catExpenses).forEach((cat) => {
+      if (catExpenses[cat] > topCatAmt) {
+        topCatAmt = catExpenses[cat];
+        topCat = cat;
+      }
+    });
+
+    let warningText = '';
+    if (totalExpense > totalIncome && totalIncome > 0) {
+      warningText = `⚠️ **অতিরিক্ত ব্যয়ের গুরুতর সতর্কতা:**\nআপনার মোট আয়ের (৳${toBnDigits(totalIncome)}) চেয়ে মোট ব্যয় (৳${toBnDigits(totalExpense)}) বেশি হয়ে গেছে! অবিলম্বে অপ্রয়োজনীয় কেনাকাটা বন্ধ রাখা প্রয়োজন।\n\n`;
+    } else if (expenseRatio >= 75) {
+      warningText = `⚠️ **অতিরিক্ত ব্যয়ের সংকেত:**\nআপনার আয়ের ইতোমধ্যে **${toBnDigits(Math.round(expenseRatio))}%** ব্যয় হয়ে গেছে (৳${toBnDigits(totalExpense)})! হাতে আর খুব কম উদ্বৃত্ত আছে।\n\n`;
+    } else {
+      warningText = `✅ **আর্থিক অবস্থা চমৎকার:**\nআপনার আয়-ব্যয়ের ভারসাম্য বেশ ভালো রয়েছে। আপনার আয়ের ${toBnDigits(Math.round(expenseRatio))}% ব্যয় হয়েছে।\n\n`;
+    }
+
+    const adviceReply = `🤖 AI Financial Advisor 📊
+
+${warningText}📊 আপনার বর্তমান আয়-ব্যয় হাইলাইটস:
+• 📈 মোট আয়: ৳${toBnDigits(totalIncome)}
+• 📉 মোট ব্যয়: ৳${toBnDigits(totalExpense)}
+• ⚖️ নিট ব্যালেন্স: ৳${toBnDigits(netBalance)}
+• 🛒 সবচেয়ে বেশি ব্যয়িত খাত: **${topCat}** (৳${toBnDigits(topCatAmt)})
+
+💡 এআই মানি ম্যানেজারের বিশেষ ৩টি পরামর্শ:
+১. **আগে সঞ্চয়, পরে ব্যয় (50-30-20 Rule):** যেকোনো আয় পাওয়া মাত্রই অন্তত ২০% টাকা সঞ্চয় অ্যাকাউন্ট বা DPS-এ সরিয়ে রাখুন।
+২. **${topCat} খাতে বাজেট নিয়ন্ত্রণ:** আপনার সবচেয়ে বেশি টাকা খরচ হচ্ছে ${topCat} খাতে। কেনাকাটার পূর্বে একটি নির্দিষ্ট সাপ্তাহিক বাজেট নির্ধারণ করে নিন।
+৩. **জরুরি ফান্ড গঠন:** অন্তত ৩ মাসের খরচের সমপরিমাণ টাকা আলাদা জরুরি ফান্ডে গচ্ছিত রাখুন।
+
+বন্ধু, যেকোনো গাণিতিক বা হিসাবসংক্রান্ত প্রশ্ন থাকলে আমাকে নির্দ্বিধায় জিজ্ঞেস করতে পারেন! 🫡`;
+
+    return {
+      intent: 'ADVICE',
+      aiReplyMessage: adviceReply,
+    };
+  }
+
+  // G. Summary / Report Request
+  if (/সামারি|রিপোর্ট|বর্তমান আর্থিক|সার্বিক|অবস্থা কেমন|হিসাব দাও|পোর্টফোলিও|ব্যালেন্স কত|মোট কত আয় ব্যয় হলো|মোট আয় ব্যয়/i.test(rawPrompt) || (!extractedAmount && /হিসাব|ব্যালেন্স|সামারি/i.test(rawPrompt) && !/কেমন আছ|হাই|হ্যালো|কথা বল/i.test(rawPrompt))) {
+    const aiReplyMessage = computeWalletBreakdown(ctx, { intent: 'SUMMARY' });
+    return {
+      intent: 'SUMMARY',
+      aiReplyMessage,
+    };
+  }
+
+  // H. Casual Greeting & Smart Conversational Chat
+  if (/কেমন আছ|কেমন আছেন|কেমন আছো|হাই|হ্যালো|হেই|সালাম|আসসালামু|কথা বল|কথা বলো|শোনো|কে তুমি|ধন্যবাদ|থ্যাঙ্কস|থ্যাংকস|কী অবস্থা|কি অবস্থা/i.test(rawPrompt) || !extractedAmount) {
+    let totalInc = 0;
+    let totalExp = 0;
+    (ctx.transactions || []).forEach((t: any) => {
+      const a = Math.abs(Number(t.amount) || 0);
+      if ((t.type || '').toString().toLowerCase() === 'income' || (t.type || '').toString().includes('আয়')) totalInc += a;
+      else totalExp += a;
+    });
+    const balance = totalInc - totalExp;
+
+    let greetingText = 'আসসালামু আলাইকুম ও শুভেচ্ছা বন্ধু! 🤖\nআমি আলহামদুলিল্লাহ ভালো আছি!';
+    if (/কেমন আছ|কেমন আছেন|কেমন আছো|কী অবস্থা|কি অবস্থা/i.test(rawPrompt)) {
+      greetingText = 'আলহামদুলিল্লাহ, আমি চমৎকার আছি বন্ধু! 🤖\nআশা করি আপনার দিনটি অনেক সুন্দর ও সফল কাটছে।';
+    } else if (/হাই|হ্যালো|হেই/i.test(rawPrompt)) {
+      greetingText = 'হ্যালো বন্ধু! 👋 ওয়ালাইকুম আসসালাম! আশা করি ভালো আছেন। 🤖';
+    } else if (/সালাম|আসসালামু/i.test(rawPrompt)) {
+      greetingText = 'ওয়ালাইকুম আসসালাম ওয়া রহমাতুল্লাহি ওয়া বারাকাতুহু! 🫡';
+    } else if (/ধন্যবাদ|থ্যাঙ্কস|থ্যাংকস/i.test(rawPrompt)) {
+      greetingText = 'আপনাকেও অনেক ধন্যবাদ বন্ধু! 🌸 আপনার হিসাব নিখুঁত রাখাই আমার মূল কাজ!';
+    } else if (/কে তুমি|তুমি কে/i.test(rawPrompt)) {
+      greetingText = 'আমি আপনার নিজস্ব "AI Money Manager Pro" 🤖—বাংলাদেশের একমাত্র স্বাধীন ও সম্পূর্ণ স্মার্ট এআই আর্থিক সহকারী!';
+    }
+
+    const reply = `${greetingText}
+
+📊 আপনার বর্তমান হিসাবের অবস্থান একনজরে:
+• 📈 মোট আয়: ৳${toBnDigits(totalInc)}
+• 📉 মোট ব্যয়: ৳${toBnDigits(totalExp)}
+• ⚖️ নিট ব্যালেন্স: ৳${toBnDigits(balance)}
+
+💡 আপনি আমাকে যেকোনো কিছু বলতে পারেন:
+১. 📝 আয়-ব্যয়ের হিসাব রাখতে: "আজকে বাজারে ৩০০ টাকা খরচ হয়েছে"
+২. 🧮 গাণিতিক হিসাব বা পার্সেন্টেজ: "৪৫০০০ টাকার ২০% কত?"
+৩. 📊 পরামর্শ বা বাজেট রিভিউ: "আমার আয়-ব্যয়ের পরামর্শ দাও"
+৪. 💬 বা যেকোনো তথ্য বা সাধারণ আলোচনা!
+
+আজকে আমি আপনাকে কীভাবে সাহায্য করতে পারি? 🫡`;
+
+    return {
+      intent: 'GREETING',
+      aiReplyMessage: reply,
+    };
+  }
+
   // Fallback
   return {
     intent: 'GENERAL',
@@ -716,7 +862,40 @@ export function smartLocalBengaliParser(ctx: AIParseContext): AIParseResult {
   };
 }
 
-// Main Entry Point: Synchronous & Instant to prevent ANY lag or delays!
+// Main Entry Point: Gemini AI Server API with Instant Fallback
 export async function parseTransactionWithAI(ctx: AIParseContext): Promise<AIParseResult> {
+  try {
+    const controller = new AbortController();
+    const timeoutId = setTimeout(() => controller.abort(), 1500); // 1.5s max timeout for zero lag
+
+    // Lightweight payload
+    const lightweightCtx = {
+      prompt: ctx.prompt,
+      categories: ctx.categories,
+      transactions: (ctx.transactions || []).slice(0, 20),
+      debts: (ctx.debts || []).slice(0, 10),
+      budgets: ctx.budgets,
+      savingsGoals: ctx.savingsGoals,
+      adminSettings: ctx.adminSettings,
+    };
+
+    const response = await fetch('/api/ai/parse-transaction', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(lightweightCtx),
+      signal: controller.signal,
+    });
+    clearTimeout(timeoutId);
+
+    if (response.ok) {
+      const serverResult = await response.json();
+      if (serverResult && serverResult.aiReplyMessage) {
+        return serverResult;
+      }
+    }
+  } catch (e) {
+    // Fast fallback to instant local AI engine
+  }
+
   return smartLocalBengaliParser(ctx);
 }

@@ -199,14 +199,15 @@ export const AIAssistantView: React.FC = () => {
     }
   };
 
-  // Preset Bangladeshi prompts matching prompt & screenshot
+  // Preset Bangladeshi prompts matching user needs
   const presetPrompts = [
     'আজকে (24) বিকাশ থেকে আমার মোবাইল এর জন্য এমবি কিনছে 272 টাকা',
     'আজকে ৫০০০ টাকা আয় হয়েছে',
+    '💡 আমার আয়-ব্যয়ের পরামর্শ দাও',
+    '🧮 ২৫০ + ৩৫০ * ৩ কত?',
+    '⚠️ আমি কি অতিরিক্ত খরচ করছি?',
     'সামারি দাও',
-    'আজকে বাজারে ৪৮০ টাকা খরচ করেছি',
     'সোহেলকে ২০০০ টাকা ধার দিলাম',
-    'আমার আর্থিক অবস্থা কেমন?',
   ];
 
   // Image Upload Handler

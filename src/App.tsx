@@ -17,6 +17,7 @@ import { AuthView } from './components/AuthView';
 import { AddTransactionModal } from './components/AddTransactionModal';
 import { TransferModal } from './components/TransferModal';
 import { SearchModal } from './components/SearchModal';
+import { PWAInstallBanner } from './components/PWAInstallBanner';
 import { TransactionType } from './types';
 
 function MainAppContent() {
@@ -34,6 +35,7 @@ function MainAppContent() {
     return (
       <div className={`min-h-screen ${currentTheme.bgClass} flex flex-col font-sans antialiased transition-colors duration-300`}>
         <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+          <PWAInstallBanner />
           <AuthView />
         </main>
       </div>
@@ -50,6 +52,7 @@ function MainAppContent() {
 
       {/* Main View Container */}
       <main className="flex-1 max-w-7xl w-full mx-auto p-4 sm:p-6">
+        <PWAInstallBanner />
         {activeTab === 'home' && (
           <DashboardView
             onOpenAddModal={(type) => setAddModalType(type)}

@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <linearGradient id="bgGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0f172a" />
+      <stop offset="50%" stop-color="#1e1b4b" />
+      <stop offset="100%" stop-color="#0284c7" />
+    </linearGradient>
+    <linearGradient id="coinGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#10b981" />
+      <stop offset="100%" stop-color="#059669" />
+    </linearGradient>
+    <filter id="glow" x="-20%" y="-20%" width="140%" height="140%">
+      <feGaussianBlur stdDeviation="12" result="blur" />
+      <feComposite in="SourceGraphic" in2="blur" operator="over" />
+    </filter>
+  </defs>
+  
+  <!-- Outer Rounded Container -->
+  <rect width="512" height="512" rx="110" fill="url(#bgGrad)" />
+  
+  <!-- Outer Glowing Circle -->
+  <circle cx="256" cy="256" r="160" fill="none" stroke="#38bdf8" stroke-width="8" opacity="0.4" />
+  
+  <!-- Inner Coin -->
+  <circle cx="256" cy="256" r="130" fill="url(#coinGrad)" filter="url(#glow)" />
+  
+  <!-- Sparkles / AI Symbols -->
+  <path d="M 256 160 L 268 220 L 328 232 L 268 244 L 256 304 L 244 244 L 184 232 L 244 220 Z" fill="#ffffff" />
+  
+  <!-- Currency / AI Text -->
+  <text x="256" y="380" font-family="Arial, sans-serif" font-weight="900" font-size="42" fill="#38bdf8" text-anchor="middle" letter-spacing="2">AI MONEY</text>
+</svg>

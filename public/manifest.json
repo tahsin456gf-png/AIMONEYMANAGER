@@ -1,0 +1,19 @@
+{
+  "name": "AI Money Manager",
+  "short_name": "AI Money",
+  "description": "স্মার্ট আয়-ব্যয় ট্র্যাকার ও ফাইন্যান্সিয়াল অ্যাকাউন্ট প্ল্যাটফর্ম",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "orientation": "portrait-primary",
+  "icons": [
+    {
+      "src": "/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

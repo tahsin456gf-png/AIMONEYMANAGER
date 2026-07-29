@@ -1,31 +1,39 @@
 {
-  "name": "AI Money Manager",
+  "id": "/",
+  "name": "AI Money Manager - স্মার্ট আয়-ব্যয় ট্র্যাকার",
   "short_name": "AI Money",
-  "description": "স্মার্ট আয়-ব্যয় ট্র্যাকার ও ফাইন্যান্সিয়াল অ্যাকাউন্ট প্ল্যাটফর্ম",
+  "description": "সহজে আয়-ব্যয়ের হিসাব রাখুন, বাজেট ট্র্যাকিং ও স্মার্ট ফাইন্যান্সিয়াল রিপোর্ট উপভোগ করুন AI Money Manager অ্যাপে।",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
   "background_color": "#0f172a",
   "theme_color": "#0f172a",
-  "orientation": "portrait-primary",
+  "orientation": "portrait",
+  "prefer_related_applications": false,
   "icons": [
     {
       "src": "/icon-192.png",
       "sizes": "192x192",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
+    },
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "maskable"
     },
     {
       "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any maskable"
+      "purpose": "any"
     },
     {
-      "src": "/icon.png",
+      "src": "/icon-512.png",
       "sizes": "512x512",
       "type": "image/png",
-      "purpose": "any"
+      "purpose": "maskable"
     }
   ]
 }

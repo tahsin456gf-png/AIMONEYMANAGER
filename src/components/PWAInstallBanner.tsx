@@ -60,8 +60,9 @@ export const PWAInstallBanner: React.FC = () => {
         <div className="flex items-center gap-3">
           <img
             src="/icon-192.png"
+            onError={(e) => { e.currentTarget.src = '/icon.svg'; }}
             alt="AI Money Manager Logo"
-            className="w-12 h-12 rounded-xl object-cover border border-cyan-400/50 shadow-md shrink-0"
+            className="w-12 h-12 rounded-xl object-cover border border-cyan-400/50 shadow-md shrink-0 bg-slate-800"
           />
           <div>
             <h4 className="font-bold text-sm text-cyan-300 flex items-center gap-1.5">
@@ -104,8 +105,9 @@ export const PWAInstallBanner: React.FC = () => {
             <div className="flex flex-col items-center text-center space-y-2">
               <img
                 src="/icon-512.png"
+                onError={(e) => { e.currentTarget.src = '/icon.svg'; }}
                 alt="AI Money Manager Logo"
-                className="w-20 h-20 rounded-2xl border-2 border-cyan-400/60 shadow-xl object-cover mb-1"
+                className="w-20 h-20 rounded-2xl border-2 border-cyan-400/60 shadow-xl object-cover mb-1 bg-slate-800"
               />
               <h3 className="text-xl font-bold text-cyan-300">
                 AI Money Manager অ্যাপ ইনস্টল গাইড
